@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Conductive Prototype</title>
+<title>Conductive v2 — Musical Engine</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 
 <script src="https://cdn.jsdelivr.net/npm/tone@14.7.77/build/Tone.js"></script>
@@ -10,36 +10,14 @@
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
 
 <style>
-body {
-  margin:0;
-  background:#000;
-  color:#0ff;
-  font-family:sans-serif;
-  overflow:hidden;
-}
+body { margin:0; background:#000; color:#0ff; font-family:sans-serif; }
 video, canvas {
-  position:absolute;
-  top:0; left:0;
-  width:100%;
-  height:100%;
-  object-fit:cover;
+  position:absolute; top:0; left:0;
+  width:100%; height:100%; object-fit:cover;
 }
-#ui {
-  position:fixed;
-  bottom:10px;
-  left:10px;
-  z-index:10;
-}
-button {
-  padding:10px;
-  margin:4px;
-  font-size:14px;
-}
-#status {
-  margin-top:6px;
-  font-size:12px;
-  white-space:pre-line;
-}
+#ui { position:fixed; bottom:10px; left:10px; }
+button { padding:10px; margin:4px; }
+#status { font-size:12px; white-space:pre-line; }
 </style>
 </head>
 
@@ -58,36 +36,69 @@ button {
 <script>
 // ---------------- STATE ----------------
 let tempo = 90;
-let volume = 0.5;
+let volume = 0.6;
 
-let drumDensity = 0.7;
+// SCALE (C Major Pentatonic)
+const scale = ["C","D","E","G","A"];
+
+// DRUM PATTERNS
+let step = 0;
+const kickPattern = [1,0,0,1,0,0,1,0];
+const snarePattern = [0,0,1,0,0,0,1,0];
+
+let drumDensity = 1;
 let drumActive = true;
 let fluteActive = true;
 
 // ---------------- AUDIO ----------------
-let flute, drum, loop;
+let flute, kick, snare, loop;
 
-async function startAudio() {
+async function startAudio(){
   await Tone.start();
 
-  flute = new Tone.Synth().toDestination();
-  drum = new Tone.MembraneSynth().toDestination();
+  flute = new Tone.Synth({
+    oscillator: { type: "sine" }
+  }).toDestination();
+
+  kick = new Tone.MembraneSynth().toDestination();
+  snare = new Tone.NoiseSynth({
+    noise: { type: "white" },
+    envelope: { attack:0.001, decay:0.2, sustain:0 }
+  }).toDestination();
 
   loop = new Tone.Loop(time => {
-    if (fluteActive) {
-      flute.volume.value = (volume * 20) - 20;
-      flute.triggerAttackRelease("C5", "16n", time);
+
+    // DRUMS
+    if(drumActive){
+      if(kickPattern[step] && Math.random()<drumDensity){
+        kick.triggerAttackRelease("C2","8n",time);
+      }
+      if(snarePattern[step] && Math.random()<drumDensity){
+        snare.triggerAttackRelease("8n",time);
+      }
     }
 
-    if (drumActive && Math.random() < drumDensity) {
-      drum.triggerAttackRelease("C2", "8n", time);
+    // MELODY (steady base)
+    if(fluteActive){
+      const note = getScaleNote(4);
+      flute.volume.value = (volume*20)-20;
+      flute.triggerAttackRelease(note,"16n",time);
     }
+
+    step = (step + 1) % kickPattern.length;
+
   }, "16n").start(0);
 
   Tone.Transport.bpm.value = tempo;
   Tone.Transport.start();
 
   status("Audio started");
+}
+
+// ---------------- SCALE ----------------
+function getScaleNote(octave){
+  const n = scale[Math.floor(Math.random()*scale.length)];
+  return n + octave;
 }
 
 // ---------------- GESTURE ----------------
@@ -101,17 +112,9 @@ const hands = new Hands({
   locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
 });
 
-hands.setOptions({
-  maxNumHands:1,
-  minDetectionConfidence:0.7,
-  minTrackingConfidence:0.7
-});
+hands.setOptions({ maxNumHands:1 });
 
 hands.onResults(results=>{
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-
   if(results.multiHandLandmarks.length>0){
     const y = results.multiHandLandmarks[0][0].y;
     const now = Date.now();
@@ -119,12 +122,12 @@ hands.onResults(results=>{
     if(lastY!==null){
       const speed = Math.abs(y-lastY)/(now-lastTime);
 
-      tempo = Math.max(60, Math.min(180, speed*2000));
-      volume = Math.min(1, speed*5);
+      tempo = Math.max(60, Math.min(160, speed*1800));
+      volume = Math.min(1, speed*4);
 
       Tone.Transport.bpm.value = tempo;
 
-      status(`Tempo: ${tempo.toFixed(0)}\nVolume: ${volume.toFixed(2)}`);
+      status(`Tempo:${tempo.toFixed(0)}\nVolume:${volume.toFixed(2)}`);
     }
 
     lastY=y;
@@ -132,93 +135,45 @@ hands.onResults(results=>{
   }
 });
 
-const camera = new Camera(video,{
-  onFrame: async()=>{ await hands.send({image:video}); },
-  width:640,
-  height:480
-});
-camera.start();
-
-// ---------------- LOCAL INTERPRETER ----------------
-function interpretLocal(text){
-  text = text.toLowerCase();
-
-  let cmd = { tempo_change:0, intensity:null, sections:[] };
-
-  if(text.includes("faster")) cmd.tempo_change+=10;
-  if(text.includes("slower")) cmd.tempo_change-=10;
-
-  if(text.includes("soft")) cmd.intensity=0.3;
-  if(text.includes("intense")) cmd.intensity=0.9;
-
-  ["drums","flute"].forEach(inst=>{
-    if(text.includes(inst)){
-      let action="modify";
-      if(text.includes("add")) action="add";
-      if(text.includes("remove")||text.includes("drop")) action="remove";
-
-      let density=0;
-      if(text.includes("more")) density=0.3;
-      if(text.includes("less")||text.includes("thin")) density=-0.3;
-
-      cmd.sections.push({name:inst,action,density_change:density});
-    }
-  });
-
-  return cmd;
-}
-
-// ---------------- APPLY COMMAND ----------------
-function applyCommand(cmd){
-  tempo += cmd.tempo_change||0;
-  tempo = Math.max(60, Math.min(180, tempo));
-  Tone.Transport.bpm.value = tempo;
-
-  if(cmd.intensity!==null) volume = cmd.intensity;
-
-  cmd.sections.forEach(sec=>{
-    if(sec.name==="drums"){
-      if(sec.action==="add") drumActive=true;
-      if(sec.action==="remove") drumActive=false;
-      drumDensity = Math.max(0, Math.min(1, drumDensity + sec.density_change));
-    }
-
-    if(sec.name==="flute"){
-      if(sec.action==="add") fluteActive=true;
-      if(sec.action==="remove") fluteActive=false;
-    }
-  });
-}
-
-// ---------------- LLM (API READY) ----------------
-async function interpretLLM(text){
-  // fallback for now
-  return interpretLocal(text);
-}
+new Camera(video,{
+  onFrame: async()=>{ await hands.send({image:video}); }
+}).start();
 
 // ---------------- VOICE ----------------
-let recognition;
+function interpret(text){
+  text = text.toLowerCase();
+
+  if(text.includes("faster")) tempo += 10;
+  if(text.includes("slower")) tempo -= 10;
+
+  if(text.includes("drums off")) drumActive=false;
+  if(text.includes("drums on")) drumActive=true;
+
+  if(text.includes("soft")) volume=0.3;
+  if(text.includes("intense")) volume=0.9;
+
+  if(text.includes("thin")) drumDensity -= 0.3;
+  if(text.includes("more drums")) drumDensity += 0.3;
+
+  drumDensity = Math.max(0, Math.min(1, drumDensity));
+}
 
 function startVoice(){
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  recognition = new SpeechRecognition();
-  recognition.continuous=true;
+  const SR = window.SpeechRecognition||window.webkitSpeechRecognition;
+  const rec = new SR();
+  rec.continuous=true;
 
-  recognition.onresult = async (e)=>{
-    const text = e.results[e.results.length-1][0].transcript;
-
-    status("Heard: "+text);
-
-    const cmd = await interpretLLM(text);
-    applyCommand(cmd);
+  rec.onresult=e=>{
+    const t = e.results[e.results.length-1][0].transcript;
+    interpret(t);
+    status("Heard: "+t);
   };
 
-  recognition.start();
-  status("Voice active");
+  rec.start();
 }
 
 // ---------------- HUMMING ----------------
-let audioCtx, analyser, dataArray;
+let audioCtx, analyser, data;
 
 async function startPitch(){
   audioCtx = new (window.AudioContext||window.webkitAudioContext)();
@@ -229,55 +184,59 @@ async function startPitch(){
   analyser.fftSize=2048;
 
   mic.connect(analyser);
-  dataArray = new Float32Array(analyser.fftSize);
+  data = new Float32Array(analyser.fftSize);
 
   detectPitch();
 }
 
-function autoCorrelate(buf,sampleRate){
-  let SIZE=buf.length;
-  let rms=0;
-  for(let i=0;i<SIZE;i++){rms+=buf[i]*buf[i];}
-  rms=Math.sqrt(rms/SIZE);
-  if(rms<0.01) return -1;
-
-  let best=0;
-  let bestVal=0;
-
+function autoCorrelate(buf,sr){
+  let best=0, bestVal=0;
   for(let i=20;i<1000;i++){
     let sum=0;
-    for(let j=0;j<SIZE-i;j++){
+    for(let j=0;j<buf.length-i;j++){
       sum+=buf[j]*buf[j+i];
     }
     if(sum>bestVal){bestVal=sum;best=i;}
   }
-
-  return sampleRate/best;
+  return sr/best;
 }
 
-function freqToNote(f){
+// SNAP TO SCALE
+function snapToScale(freq){
   const A4=440;
-  const notes=["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
-  let n = Math.round(12*Math.log2(f/A4))+57;
-  return notes[n%12]+Math.floor(n/12);
+  let n = Math.round(12*Math.log2(freq/A4))+57;
+  const noteNames=["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+  let name = noteNames[n%12];
+
+  // force into scale
+  if(!scale.includes(name)){
+    name = scale[Math.floor(Math.random()*scale.length)];
+  }
+
+  return name + Math.floor(n/12);
 }
 
 function detectPitch(){
-  analyser.getFloatTimeDomainData(dataArray);
-  let freq = autoCorrelate(dataArray, audioCtx.sampleRate);
+  analyser.getFloatTimeDomainData(data);
+  let freq = autoCorrelate(data, audioCtx.sampleRate);
 
-  if(freq!==-1 && fluteActive){
-    let note = freqToNote(freq);
-    flute.triggerAttackRelease(note,"8n");
-    status("🎤 "+note+"\nTempo:"+tempo);
+  if(freq>50 && fluteActive){
+    const note = snapToScale(freq);
+
+    // QUANTIZED PLAY
+    Tone.Transport.scheduleOnce(time=>{
+      flute.triggerAttackRelease(note,"8n",time);
+    }, "+0");
+
+    status("🎤 "+note);
   }
 
   requestAnimationFrame(detectPitch);
 }
 
 // ---------------- UTIL ----------------
-function status(txt){
-  document.getElementById("status").innerText = txt;
+function status(t){
+  document.getElementById("status").innerText = t;
 }
 </script>
 
