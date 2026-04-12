@@ -104,10 +104,11 @@
         .step-grid.rhythm .step-cell{height:36px;cursor:pointer}
         .step-grid.rhythm .step-cell.on{background:rgba(0,229,255,0.18);border-color:rgba(0,229,255,0.25)}
         .step-grid.melodic .step-cell{display:flex;flex-direction:column;gap:1px;padding:1px;height:auto}
-        .note-row{height:18px;border-radius:2px;background:rgba(0,229,255,0.015);cursor:pointer;transition:background 0.08s;position:relative}
+        .note-row{height:16px;border-radius:2px;background:rgba(0,229,255,0.015);cursor:pointer;transition:background 0.08s;position:relative}
         .note-row:hover{background:rgba(0,229,255,0.07)}
         .note-row.on{background:rgba(0,229,255,0.22)}
-        .note-row-label{position:absolute;right:2px;top:50%;transform:translateY(-50%);font-size:6px;color:rgba(0,229,255,0.15);font-family:'JetBrains Mono',monospace;pointer-events:none}
+        .note-row-label{position:absolute;right:2px;top:50%;transform:translateY(-50%);font-size:6px;color:rgba(0,229,255,0.2);font-family:'JetBrains Mono',monospace;pointer-events:none}
+        .note-row.on .note-row-label{color:rgba(0,229,255,0.5)}
 
         /* BOTTOM */
         .bottom-bar{flex-shrink:0;display:flex;gap:7px;align-items:center;padding:8px 12px;flex-wrap:wrap}
@@ -397,9 +398,33 @@ window.addEventListener('resize',()=>{drawStageArcs();
 });
 
 // ═══════════════════════════════════════════
-// PATTERN EDITOR — MULTI-NOTE
+// PATTERN EDITOR — EXACT NOTES
 // ═══════════════════════════════════════════
-const NOTE_OCTS=['5','4','3','2'];
+
+// Build scale notes for the current key
+function getScale(key,mode){
+    const sharp=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+    const flat =['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B'];
+    const intervals=mode==='minor'?[0,2,3,5,7,8,10]:[0,2,4,5,7,9,11];
+    const rootIdx=sharp.indexOf(key);
+    if(rootIdx<0)return['C','D','E','F','G','A','B'];
+    const ref=mode==='minor'?flat:sharp;
+    return intervals.map(i=>ref[(rootIdx+i)%12]);
+}
+
+// Get note rows for the pattern editor (6 notes: scale degrees 1,3,5 across 2 octaves)
+function getPatternNotes(id){
+    const scale=getScale(engine.key,engine.mode);
+    const def=INSTRUMENTS[id];
+    let lo=4, hi=5;
+    if(def.cat==='bass'){lo=2;hi=3}
+    else if(def.cat==='atmo'){lo=3;hi=4}
+    // 6 rows: root/3rd/5th in high octave, then root/3rd/5th in low octave
+    return[
+        scale[4]+hi, scale[2]+hi, scale[0]+hi,
+        scale[4]+lo, scale[2]+lo, scale[0]+lo,
+    ];
+}
 
 function openPattern(id){
     const def=INSTRUMENTS[id], st=engine.inst[id];
@@ -410,7 +435,7 @@ function openPattern(id){
     grid.innerHTML='';
     grid.className='step-grid '+(isR?'rhythm':'melodic');
 
-    // Paint mode state
+    const noteRows=isR?[]:getPatternNotes(id);
     let painting=false, paintValue=null;
 
     for(let s=0;s<STEPS;s++){
@@ -420,14 +445,11 @@ function openPattern(id){
 
         if(isR){
             if(st.pattern[s].length)cell.classList.add('on');
-
             const toggle=()=>{
                 st.pattern[s]=st.pattern[s].length?[]:['hit'];
                 st.usePattern=st.pattern.some(p=>p.length);
                 cell.classList.toggle('on',st.pattern[s].length>0);
             };
-
-            // Swipe-to-paint: touchstart sets paint mode, touchmove paints
             cell.addEventListener('mousedown',e=>{e.preventDefault();painting=true;paintValue=st.pattern[s].length?null:'hit';toggle()});
             cell.addEventListener('mouseenter',()=>{if(!painting)return;
                 if(paintValue){st.pattern[s]=['hit'];cell.classList.add('on')}
@@ -436,20 +458,19 @@ function openPattern(id){
             });
             cell.addEventListener('touchstart',e=>{e.preventDefault();e.stopPropagation();toggle()},{passive:false});
         } else {
-            NOTE_OCTS.forEach(oct=>{
+            noteRows.forEach(noteStr=>{
                 const row=document.createElement('div');
-                row.className='note-row'+(st.pattern[s].includes(oct)?' on':'');
-                row.dataset.oct=oct; row.dataset.step=s;
-                row.innerHTML='<span class="note-row-label">'+oct+'</span>';
+                row.className='note-row'+(st.pattern[s].includes(noteStr)?' on':'');
+                row.dataset.note=noteStr;
+                row.innerHTML='<span class="note-row-label">'+noteStr+'</span>';
 
                 const toggle=()=>{
                     const arr=st.pattern[s];
-                    const idx=arr.indexOf(oct);
-                    if(idx>=0)arr.splice(idx,1);else arr.push(oct);
-                    row.classList.toggle('on',arr.includes(oct));
+                    const idx=arr.indexOf(noteStr);
+                    if(idx>=0)arr.splice(idx,1);else arr.push(noteStr);
+                    row.classList.toggle('on',arr.includes(noteStr));
                     st.usePattern=st.pattern.some(p=>p.length);
                 };
-
                 row.addEventListener('mousedown',e=>{e.preventDefault();e.stopPropagation();toggle()});
                 row.addEventListener('touchstart',e=>{e.preventDefault();e.stopPropagation();toggle()},{passive:false});
                 cell.appendChild(row);
@@ -457,8 +478,6 @@ function openPattern(id){
         }
         grid.appendChild(cell);
     }
-
-    // End paint on mouseup
     document.addEventListener('mouseup',()=>{painting=false},{once:false});
 }
 
@@ -478,13 +497,14 @@ function clearPattern(){
 function randomPattern(){
     if(!selectedInst)return;
     const def=INSTRUMENTS[selectedInst],st=engine.inst[selectedInst],e=engine.energy;
+    const noteRows=def.cat==='rhythm'?[]:getPatternNotes(selectedInst);
     for(let s=0;s<STEPS;s++){
         st.pattern[s]=[];
         if(Math.random()<e*0.45){
             if(def.cat==='rhythm')st.pattern[s]=['hit'];
             else{
-                st.pattern[s]=[NOTE_OCTS[Math.floor(Math.random()*4)]];
-                if(Math.random()<0.2){const o2=NOTE_OCTS[Math.floor(Math.random()*4)];if(!st.pattern[s].includes(o2))st.pattern[s].push(o2)}
+                st.pattern[s]=[noteRows[Math.floor(Math.random()*noteRows.length)]];
+                if(Math.random()<0.2){const n2=noteRows[Math.floor(Math.random()*noteRows.length)];if(!st.pattern[s].includes(n2))st.pattern[s].push(n2)}
             }
         }
     }
@@ -573,11 +593,11 @@ function playStep(id,chord,vals,time,e){
     if(def.cat==='rhythm'){
         ({kick:()=>synths.kick.triggerAttackRelease("C1","8n",time,e),snare:()=>synths.snare.triggerAttackRelease("16n",time,e*0.4),hihat:()=>synths.hihat.triggerAttackRelease("32n",time,e*0.1),clap:()=>synths.clap.triggerAttackRelease("16n",time,e*0.3),perc:()=>synths.perc.triggerAttackRelease("32n",time,e*0.12)})[id]?.();
     }else{
-        vals.forEach(oct=>{
-            const note=chord[Math.floor(Math.random()*3)].replace(/\d/,oct);
-            if(id==='pluck')synths.pluck.triggerAttackRelease(note,time);
+        // vals are exact note strings like "C4", "G5" — play them directly
+        vals.forEach(noteStr=>{
+            if(id==='pluck')synths.pluck.triggerAttackRelease(noteStr,time);
             else if(id==='bell')synths.bell.triggerAttackRelease("16n",time,e*0.1);
-            else synths[id]?.triggerAttackRelease?.(note,"8n",time,e*0.3);
+            else synths[id]?.triggerAttackRelease?.(noteStr,"8n",time,e*0.3);
         });
     }
     flashIcon(id);
