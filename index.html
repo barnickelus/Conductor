@@ -96,6 +96,28 @@
         .text-input-row input::placeholder{color:rgba(0,229,255,0.1)}
         .text-input-row .btn{flex-shrink:0;width:32px;padding:0}
         #log{font-family:'JetBrains Mono',monospace;font-size:7px;color:rgba(0,229,255,0.2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px}
+
+        /* CHORD PROGRESSION BAR */
+        .prog-bar{flex-shrink:0;padding:0 6px;margin-top:4px}
+        .prog-box{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:6px 10px;display:flex;align-items:center;gap:8px}
+        .prog-toggle{display:flex;align-items:center;gap:5px;cursor:pointer;flex-shrink:0}
+        .prog-toggle-label{font-size:7px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(0,229,255,0.25);font-family:'JetBrains Mono',monospace}
+        .prog-switch{width:28px;height:14px;border-radius:7px;background:rgba(0,229,255,0.08);border:1px solid var(--border);position:relative;transition:all 0.2s;cursor:pointer}
+        .prog-switch::after{content:'';position:absolute;top:1px;left:1px;width:10px;height:10px;border-radius:50%;background:rgba(0,229,255,0.3);transition:all 0.2s}
+        .prog-switch.on{background:rgba(57,255,20,0.1);border-color:rgba(57,255,20,0.2)}
+        .prog-switch.on::after{left:15px;background:var(--green)}
+        .prog-chords{display:flex;gap:3px;flex:1;min-width:0}
+        .prog-chord{flex:1;text-align:center;padding:6px 4px;border-radius:5px;border:1px solid rgba(0,229,255,0.05);font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:rgba(0,229,255,0.3);cursor:pointer;transition:all 0.15s;position:relative}
+        .prog-chord:hover{border-color:rgba(0,229,255,0.15);color:rgba(0,229,255,0.5)}
+        .prog-chord.active{border-color:rgba(0,229,255,0.3);color:var(--cyan);background:rgba(0,229,255,0.06);box-shadow:0 0 8px rgba(0,229,255,0.08)}
+        .prog-chord.off{opacity:0.3;pointer-events:none}
+        .prog-chord-num{position:absolute;top:1px;left:3px;font-size:5px;color:rgba(0,229,255,0.15);font-weight:400}
+        .chord-edit-drop{position:absolute;bottom:100%;left:50%;transform:translateX(-50%);margin-bottom:4px;background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:4px;display:none;z-index:20;backdrop-filter:blur(12px);min-width:80px}
+        .chord-edit-drop.open{display:flex;flex-wrap:wrap;gap:2px}
+        .chord-opt{padding:4px 6px;border-radius:3px;font-family:'JetBrains Mono',monospace;font-size:8px;color:rgba(0,229,255,0.4);cursor:pointer;transition:all 0.15s;text-align:center}
+        .chord-opt:hover{background:rgba(0,229,255,0.08);color:var(--cyan)}
+        .chord-opt.current{color:var(--cyan);background:rgba(0,229,255,0.1)}
+
         @media(max-width:700px){.inst-icon{width:38px;height:38px}.inst-icon .sym{font-size:12px}.stage{height:250px}.stat-block .value{font-size:16px}}
     </style>
 </head>
@@ -128,6 +150,16 @@
     </div>
     <div class="conduct-zone" id="conduct-zone"></div>
     <div class="stage-wrap"><div class="stage" id="stage"><canvas id="stage-bg"></canvas><div class="conductor-pos">▲ you</div></div></div>
+    <!-- CHORD PROGRESSION BAR -->
+    <div class="prog-bar">
+        <div class="prog-box">
+            <div class="prog-toggle" onclick="toggleProg()">
+                <div class="prog-switch on" id="prog-switch"></div>
+                <div class="prog-toggle-label">Prog</div>
+            </div>
+            <div class="prog-chords" id="prog-chords"></div>
+        </div>
+    </div>
     <div class="pattern-wrap" id="pattern-wrap">
         <div class="pattern-box">
             <div class="pattern-header">
@@ -145,7 +177,6 @@
     <div class="bottom-bar">
         <button class="btn" id="init-btn">▶ Start</button>
         <button class="btn" id="pause-btn" style="display:none">⏸</button>
-        <button class="btn" id="prog-btn" title="Toggle auto chord progression">Prog ●</button>
         <button class="btn" id="voice-btn">🎤 Speak</button>
         <div class="text-input-row">
             <input type="text" id="cmd-input" placeholder="describe what you want…">
@@ -415,9 +446,97 @@ function updatePlayhead(){if(!selectedInst)return;const cells=document.getElemen
 function clearPattern(){if(!selectedInst)return;engine.inst[selectedInst].pattern=Array.from({length:STEPS},()=>[]);engine.inst[selectedInst].usePattern=false;openPattern(selectedInst)}
 function randomPattern(){if(!selectedInst)return;const def=INSTRUMENTS[selectedInst],st=engine.inst[selectedInst],e=engine.energy;const nr=def.cat==='rhythm'?[]:getPatternNotes(selectedInst);for(let s=0;s<STEPS;s++){st.pattern[s]=[];if(Math.random()<e*0.45){if(def.cat==='rhythm')st.pattern[s]=['hit'];else{st.pattern[s]=[nr[Math.floor(Math.random()*nr.length)]];if(Math.random()<0.2){const n2=nr[Math.floor(Math.random()*nr.length)];if(!st.pattern[s].includes(n2))st.pattern[s].push(n2)}}}}st.usePattern=true;openPattern(selectedInst)}
 
-// ═══ CHORD PROGRESSION TOGGLE ═══
-const progBtn=document.getElementById('prog-btn');
-progBtn.addEventListener('click',()=>{autoProgress=!autoProgress;progBtn.textContent=autoProgress?'Prog ●':'Prog ○';progBtn.classList.toggle('toggled',autoProgress);log(autoProgress?'Chord progression ON':'Chord progression OFF — holding current chord')});
+// ═══ CHORD PROGRESSION DISPLAY + EDITOR ═══
+let editingChordIdx = null;
+
+function toggleProg(){
+    autoProgress=!autoProgress;
+    const sw=document.getElementById('prog-switch');
+    sw.classList.toggle('on',autoProgress);
+    renderProgChords();
+    log(autoProgress?'Progression cycling':'Progression held');
+}
+
+function chordToName(notes){
+    // Convert ["C3","Eb3","G3"] → "Cm"
+    if(!notes||!notes.length)return'?';
+    const root=notes[0].replace(/\d/,'');
+    // Check for minor: if 2nd note is minor 3rd
+    const s=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+    const f=['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B'];
+    let ri=s.indexOf(root); if(ri<0)ri=f.indexOf(root);
+    if(ri<0)return root;
+    const second=notes[1]?.replace(/\d/,'');
+    let si=s.indexOf(second); if(si<0)si=f.indexOf(second);
+    if(si<0)return root;
+    const interval=(si-ri+12)%12;
+    if(interval===3)return root+'m';
+    if(interval===4)return root;
+    return root;
+}
+
+function getAvailableChords(){
+    const sc=getScale(engine.key,engine.mode);
+    // Build triads on each scale degree
+    const chords=[];
+    const intervals=engine.mode==='minor'?[0,2,3,5,7,8,10]:[0,2,4,5,7,9,11];
+    for(let d=0;d<7;d++){
+        const r=sc[d], third=sc[(d+2)%7], fifth=sc[(d+4)%7];
+        chords.push({name:r, notes:[r+'3',third+'3',fifth+'3']});
+    }
+    return chords;
+}
+
+function renderProgChords(){
+    const el=document.getElementById('prog-chords');
+    el.innerHTML='';
+    engine.chords.forEach((chord,i)=>{
+        const div=document.createElement('div');
+        div.className='prog-chord'+(i===engine.chordIndex?' active':'')+(autoProgress?'':i===engine.chordIndex?'':' off');
+        div.innerHTML='<span class="prog-chord-num">'+(i+1)+'</span>'+chordToName(chord);
+        div.addEventListener('pointerdown',e=>{e.stopPropagation();openChordEdit(i,div)});
+        el.appendChild(div);
+    });
+}
+
+function openChordEdit(idx,anchor){
+    // Close any existing
+    document.querySelectorAll('.chord-edit-drop.open').forEach(d=>d.remove());
+    const avail=getAvailableChords();
+    const drop=document.createElement('div');
+    drop.className='chord-edit-drop open';
+    const currentName=chordToName(engine.chords[idx]);
+    avail.forEach(ch=>{
+        const opt=document.createElement('div');
+        opt.className='chord-opt'+(chordToName(ch.notes)===currentName?' current':'');
+        opt.textContent=chordToName(ch.notes);
+        opt.addEventListener('pointerdown',e=>{
+            e.stopPropagation();
+            engine.chords[idx]=ch.notes;
+            drop.remove();
+            renderProgChords();
+            log('Chord '+(idx+1)+' → '+chordToName(ch.notes));
+        });
+        drop.appendChild(opt);
+    });
+    anchor.style.position='relative';
+    anchor.appendChild(drop);
+    // Close on outside click
+    setTimeout(()=>{
+        const close=e=>{if(!drop.contains(e.target)){drop.remove();document.removeEventListener('pointerdown',close)}};
+        document.addEventListener('pointerdown',close);
+    },50);
+}
+
+function updateProgDisplay(){
+    const cells=document.getElementById('prog-chords')?.children;
+    if(!cells)return;
+    for(let i=0;i<cells.length;i++){
+        cells[i].classList.toggle('active',i===engine.chordIndex);
+    }
+}
+
+renderProgChords();
 
 // ═══ BOOT ═══
 document.getElementById('init-btn').addEventListener('click',boot);
@@ -477,7 +596,9 @@ async function boot(){
             }
         });
         if(engine.inst.arp?.active)arpStep++;
-        currentStep++;updatePlayhead();
+        currentStep++;
+        // Sync visual updates with audio using Tone.Draw
+        Tone.Draw.schedule(()=>{updatePlayhead();updateProgDisplay()},time);
     },"16n").start(0);
 
     Tone.Transport.bpm.value=engine.tempo;Tone.Transport.start();
@@ -566,7 +687,7 @@ function applyAI(j){
     if(j.instruments)Object.entries(j.instruments).forEach(([k,v])=>{if(engine.inst[k])engine.inst[k].active=!!v});
     if(KEYS[engine.key]?.[engine.mode])engine.chords=KEYS[engine.key][engine.mode];
     if(booted){Tone.Transport.bpm.rampTo(engine.tempo,2);effects.filter.frequency.rampTo(engine.filterCutoff,1)}
-    buildStage();updateUI();log('AI → '+engine.tempo+'bpm '+engine.key+(engine.mode==='minor'?'m':''));
+    buildStage();updateUI();renderProgChords();log('AI → '+engine.tempo+'bpm '+engine.key+(engine.mode==='minor'?'m':''));
 }
 
 function localFallback(cmd){
@@ -578,7 +699,7 @@ function localFallback(cmd){
     else if(t.match(/ambient|space|dream/)){engine.tempo=70;engine.energy=0.3;engine.inst.pad.active=true;engine.inst.texture.active=true;engine.inst.bell.active=true}
     if(KEYS[engine.key]?.[engine.mode])engine.chords=KEYS[engine.key][engine.mode];
     if(booted)Tone.Transport.bpm.rampTo(engine.tempo,2);
-    buildStage();updateUI();log('Fallback → '+engine.tempo+'bpm');
+    buildStage();updateUI();renderProgChords();log('Fallback → '+engine.tempo+'bpm');
 }
 
 // Voice
