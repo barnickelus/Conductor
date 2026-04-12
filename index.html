@@ -57,7 +57,8 @@ canvas#viz{position:fixed;inset:0;width:100%;height:100%;z-index:1}
 .cmd-bar input{flex:1;background:rgba(0,0,0,0.4);border:1px solid var(--b);color:var(--c);padding:7px 10px;border-radius:7px;font-size:10px;outline:none;min-width:0}
 .cmd-bar input:focus{border-color:var(--c)}
 .cmd-bar input::placeholder{color:rgba(0,229,255,0.1)}
-#log{font-size:7px;color:rgba(0,229,255,0.18);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:1;min-width:60px}
+.cmd-bar .tbtn{width:36px;height:36px;padding:0;flex-shrink:0;font-size:14px}
+#log{font-size:7px;color:rgba(0,229,255,0.18);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:1;min-width:60px;max-width:200px}
 /* === STAGE === */
 .stage-w{padding:0 6px}
 .stage{position:relative;height:280px;overflow:visible}
@@ -208,15 +209,21 @@ const SF={
     pad:()=>new Tone.PolySynth(Tone.Synth,{oscillator:{type:"fatsawtooth",count:3,spread:40},volume:-10,envelope:{attack:2.5,decay:1,sustain:0.8,release:3}}),
     strings:()=>new Tone.PolySynth(Tone.Synth,{oscillator:{type:"fatsawtooth",count:5,spread:20},volume:-10,envelope:{attack:1.5,decay:0.5,sustain:0.9,release:2.5}}),
     choir:()=>new Tone.PolySynth(Tone.Synth,{oscillator:{type:"sine"},volume:-12,envelope:{attack:2,decay:1,sustain:0.7,release:3}}),
-    texture:()=>new Tone.NoiseSynth({volume:-16,noise:{type:'brown'},envelope:{attack:3,decay:2,sustain:0.3,release:4}}),
+    texture:()=>new Tone.NoiseSynth({volume:-24,noise:{type:'brown'},envelope:{attack:4,decay:3,sustain:0.15,release:5}}),
 };
 const SBUS={kick:'comp',snare:'filt',hihat:'filt',clap:'filt',perc:'del',subbass:'comp',synbass:'comp',lead:'del',pluck:'del',bell:'cho',arp:'del',pad:'wide',strings:'cho',choir:'wide',texture:'rev'};
 
 // Trigger helpers — correct signature per synth type
-function trigRhythm(syn,dur,time,vel){try{syn.triggerAttackRelease(dur,time,vel)}catch(e){console.warn('trig',e)}}
-function trigNote(syn,note,dur,time,vel){try{syn.triggerAttackRelease(note,dur,time,vel)}catch(e){console.warn('trig',e)}}
-function trigPluck(syn,note,dur,time){try{syn.triggerAttackRelease(note,dur,time)}catch(e){console.warn('trig',e)}}
-function trigPoly(syn,notes,dur,time,vel){try{syn.triggerAttackRelease(notes,dur,time,vel)}catch(e){console.warn('trig',e)}}
+// NoiseSynth: triggerAttackRelease(duration, time, velocity) ✓
+function trigRhythm(syn,dur,time,vel){try{syn.triggerAttackRelease(dur,time,vel)}catch(e){console.warn('trigR',e)}}
+// MetalSynth: NO triggerAttackRelease override — must use attack+release manually
+function trigMetal(syn,dur,time,vel){try{syn.triggerAttack(time,vel);syn.triggerRelease(time+Tone.Time(dur).toSeconds())}catch(e){console.warn('trigM',e)}}
+// MonoSynth/MembraneSynth: triggerAttackRelease(note, duration, time, velocity)
+function trigNote(syn,note,dur,time,vel){try{syn.triggerAttackRelease(note,dur,time,vel)}catch(e){console.warn('trigN',e)}}
+// PluckSynth: triggerAttackRelease(note, duration, time) — no velocity
+function trigPluck(syn,note,dur,time){try{syn.triggerAttackRelease(note,dur,time)}catch(e){console.warn('trigP',e)}}
+// PolySynth: triggerAttackRelease(notes, duration, time, velocity)
+function trigPoly(syn,notes,dur,time,vel){try{syn.triggerAttackRelease(notes,dur,time,vel)}catch(e){console.warn('trigPo',e)}}
 
 const INS={
     kick:{c:'rhythm',n:'Kick',s:'◉',a:-55,t:0,b:'kick'},snare:{c:'rhythm',n:'Snare',s:'◎',a:-25,t:0,b:'snare'},
@@ -470,11 +477,12 @@ function pStep(id,d,ch,v,t,e){
     const b=d.b;
     if(d.c==='rhythm'){
         if(b==='kick')trigNote(sy[id],"C1","8n",t,e*0.7+0.3);
-        else trigRhythm(sy[id],"16n",t,e*0.6+0.3); // snare/hihat/clap/perc — all get audible velocity
+        else if(b==='hihat'||b==='perc')trigMetal(sy[id],"16n",t,e*0.6+0.3);
+        else trigRhythm(sy[id],"16n",t,e*0.6+0.3); // snare/clap (NoiseSynth)
     }else{
         v.forEach(ns=>{
             if(b==='pluck')trigPluck(sy[id],ns,"8n",t);
-            else if(b==='bell')trigRhythm(sy[id],"8n",t,e*0.5+0.3);
+            else if(b==='bell')trigMetal(sy[id],"8n",t,e*0.5+0.3);
             else trigNote(sy[id],ns,"8n",t,e*0.5+0.3);
         });
     }
@@ -487,14 +495,14 @@ function gen(id,d,ch,s,t,e,arpS){
     switch(b){
         case'kick':if(s%8===0||(s%8===3&&e>0.6)||(s%8===6&&e>0.8)){trigNote(sy[id],"C1","8n",t,Math.min(e+0.3,1));flash(id)}break;
         case'snare':if(s%8===4||(s%16===10&&e>0.5)){trigRhythm(sy[id],"16n",t,e*0.7+0.2);flash(id)}break;
-        case'hihat':if(e>0.15&&(s%4===0||(s%2===0&&e>0.45))){trigRhythm(sy[id],"16n",t,e*0.5+0.2);flash(id)}break;
+        case'hihat':if(e>0.15&&(s%4===0||(s%2===0&&e>0.45))){trigMetal(sy[id],"16n",t,e*0.5+0.3);flash(id)}break;
         case'clap':if(s%8===4){trigRhythm(sy[id],"16n",t,e*0.6+0.2);flash(id)}break;
-        case'perc':if(s%4===2){trigRhythm(sy[id],"16n",t,e*0.5+0.2);flash(id)}break;
+        case'perc':if(s%4===2){trigMetal(sy[id],"16n",t,e*0.5+0.2);flash(id)}break;
         case'subbass':if(s%8===0){trigNote(sy[id],ch[0].replace(/\d/,'1'),"4n",t,e*0.7+0.2);flash(id)}break;
         case'synbass':if(s%8===0){trigNote(sy[id],ch[0].replace(/\d/,'2'),"4n",t,e*0.6+0.2);flash(id)}break;
         case'lead':if(Math.random()<e*0.55&&(s%4===0||(s%4===2&&Math.random()<0.4))){trigNote(sy[id],ch[Math.floor(Math.random()*3)].replace(/[23]/,Math.random()>0.5?'5':'4'),"8n",t,e*0.5+0.2);flash(id)}break;
         case'pluck':if(s%8===0){trigPluck(sy[id],ch[Math.floor(Math.random()*3)].replace(/[23]/,'4'),"8n",t);flash(id)}break;
-        case'bell':if(s%8===0&&Math.random()<e*0.4){trigRhythm(sy[id],"8n",t,e*0.5+0.2);flash(id)}break;
+        case'bell':if(s%8===0&&Math.random()<e*0.4){trigMetal(sy[id],"4n",t,e*0.4+0.2);flash(id)}break;
         case'arp':if(s%2===0){const ns=[...ch.map(n=>n.replace(/[23]/,'4')),...ch.map(n=>n.replace(/[23]/,'5'))];trigNote(sy[id],ns[arpS%ns.length],"16n",t,e*0.5+0.2);flash(id)}break;
     }
 }
@@ -521,19 +529,37 @@ cz.addEventListener('mouseup',cE);cz.addEventListener('mouseleave',cE);
 // ═══════════════════════════════════════════
 async function interp(input){
     if(!input?.trim())return;lg('Thinking…');
-    if(apiSt!=='ok'){fallback(input);return}
+    if(!gKey){fallback(input);return}
     setAP('chk');
     const il=Object.entries(INS).map(([k,v])=>k+'('+v.n+')').join(', ');
     const al=Object.entries(E.inst).filter(([k,v])=>v.on).map(([k])=>k).join(',');
-    const sys=`You are the AI brain of "Conductive", a live music engine. Interpret natural language — including poetic and emotional descriptions — into musical parameters. Return ONLY JSON, no markdown. Only include changed fields.
+    // Put everything in one prompt to avoid systemInstruction compatibility issues
+    const prompt=`You are the AI brain of "Conductive", a live music engine. Return ONLY valid JSON. No markdown, no explanation, no code fences.
 
 Instruments: ${il}
 Keys: C,D,E,F,G,A,B. Modes: minor, major.
-Format: {"tempo":40-200,"energy":0-1,"key":"letter","mode":"minor|major","filterCutoff":100-8000,"instruments":{"name":bool,...}}`;
-    const msg=`State: tempo=${E.tempo}, energy=${E.energy}, key=${E.key} ${E.mode}, filter=${E.fc}, active=[${al}]\nCommand: "${input}"`;
-    const r=await gCall(msg,sys,2);
-    if(r.ok){try{applyAI(JSON.parse(r.text.replace(/```json|```/g,'').trim()));setAP('ok')}catch(e){setAP('off','Bad JSON');fallback(input)}}
-    else{setAP('off',r.error);fallback(input)}
+Format: {"tempo":40-200,"energy":0-1,"key":"letter","mode":"minor|major","filterCutoff":100-8000,"instruments":{"name":bool,...}}
+Only include fields that should change. Interpret poetic language musically. Be bold.
+
+Current state: tempo=${E.tempo}, energy=${E.energy}, key=${E.key} ${E.mode}, filter=${E.fc}, active=[${al}]
+Command: "${input}"`;
+    const r=await gCall(prompt,null,2);
+    if(r.ok){
+        try{
+            const cleaned=r.text.replace(/```json|```/g,'').trim();
+            const j=JSON.parse(cleaned);
+            applyAI(j);setAP('ok');
+        }catch(e){
+            console.error('Parse fail:',r.text);
+            lg('AI responded but bad format — using fallback');
+            setAP('ok'); // keep status ok, just this response was bad
+            fallback(input);
+        }
+    }else{
+        lg('AI error — fallback. '+r.error);
+        setAP('ok'); // don't kill the connection permanently
+        fallback(input);
+    }
 }
 
 function applyAI(j){
@@ -563,18 +589,26 @@ function fallback(cmd){
 document.getElementById('voiceB').addEventListener('click',startVoice);
 function startVoice(){
     const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-    if(!SR){lg("Speech not available. Use text input.");return}
-    // Request mic permission explicitly first
-    navigator.mediaDevices.getUserMedia({audio:true}).then(stream=>{
-        stream.getTracks().forEach(t=>t.stop()); // release immediately
-        const rec=new SR();rec.lang='en-US';rec.interimResults=false;rec.continuous=false;
-        const btn=document.getElementById('voiceB');
-        rec.onstart=()=>{btn.classList.add('rec');btn.textContent='● Listening…';lg('Speak now…')};
-        rec.onresult=e=>{const txt=e.results[0][0].transcript;lg('Heard: "'+txt+'"');interp(txt)};
-        rec.onerror=e=>{lg('Voice error: '+e.error);console.log('Speech error:',e)};
-        rec.onend=()=>{btn.classList.remove('rec');btn.textContent='🎤 Speak'};
-        rec.start();
-    }).catch(e=>{lg("Mic denied. Check permissions.");console.log('Mic error:',e)});
+    if(!SR){lg("Speech not available in this browser.");return}
+    const rec=new SR();
+    rec.lang='en-US';
+    rec.interimResults=false;
+    rec.continuous=false;
+    rec.maxAlternatives=1;
+    const btn=document.getElementById('voiceB');
+    let got=false;
+    rec.onstart=()=>{btn.classList.add('rec');btn.textContent='● Listening…';lg('Speak now…')};
+    rec.onresult=e=>{got=true;const txt=e.results[0][0].transcript;lg('Heard: "'+txt+'"');interp(txt)};
+    rec.onspeechend=()=>{rec.stop()};
+    rec.onerror=e=>{
+        console.log('Speech error:',e.error);
+        if(e.error==='not-allowed'||e.error==='service-not-allowed')lg("Mic blocked. Allow mic in browser settings.");
+        else if(e.error==='no-speech')lg("No speech heard. Try again.");
+        else if(e.error==='aborted')lg("Voice cancelled.");
+        else lg("Voice error: "+e.error);
+    };
+    rec.onend=()=>{btn.classList.remove('rec');btn.textContent='🎤 Speak';if(!got)lg("Tap Speak and talk immediately.")};
+    try{rec.start();lg("Mic active — speak now…")}catch(e){lg("Could not start mic: "+e.message)}
 }
 
 // TEXT INPUT
