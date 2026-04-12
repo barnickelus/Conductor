@@ -2,192 +2,351 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Conductive v2 — Integrated Engine</title>
+    <title>Conductive v5.0 — Sympathetic Engine</title>
     <meta name="viewport" content="width=device-width,initial-scale=1">
-
     <script src="https://cdn.jsdelivr.net/npm/tone@14.7.77/build/Tone.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Outfit:wght@300;600;900&display=swap" rel="stylesheet">
     <style>
-        body { margin:0; background:#050505; color:#0ff; font-family:'Courier New', monospace; overflow: hidden; }
-        video, canvas { position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; opacity: 0.4; }
-        #ui { position:fixed; bottom:20px; left:20px; z-index: 10; background: rgba(0,0,0,0.7); padding: 15px; border: 1px solid #0ff; }
-        button { background: transparent; color: #0ff; border: 1px solid #0ff; padding: 10px 20px; cursor: pointer; margin-right: 5px; transition: 0.3s; }
-        button:hover { background: #0ff; color: #000; }
-        #status { margin-top: 10px; font-size: 13px; line-height: 1.4; white-space: pre-line; color: #0f0; }
-        .label { color: #555; font-size: 10px; text-transform: uppercase; margin-bottom: 5px; }
+        *{margin:0;padding:0;box-sizing:border-box}
+        :root{--cyan:#00e5ff;--green:#39ff14;--magenta:#ff2daa;--bg:#020409;--panel:rgba(4,8,20,0.88);--border:rgba(0,229,255,0.15)}
+        body{background:var(--bg);color:#c0dce6;font-family:'Outfit',sans-serif;overflow:hidden;height:100vh;width:100vw}
+        canvas#main{position:fixed;top:0;left:0;width:100%;height:100%;z-index:1}
+        video#video{position:fixed;opacity:0;width:1px;height:1px;pointer-events:none}
+        .ui{position:fixed;inset:0;z-index:10;display:flex;flex-direction:column;justify-content:space-between;padding:24px;pointer-events:none}
+        .ui>*{pointer-events:auto}
+        .top-bar{display:flex;justify-content:space-between;align-items:flex-start}
+        .brand{display:flex;align-items:center;gap:12px}
+        .brand svg{width:28px;height:28px}
+        .brand-text{font-size:11px;letter-spacing:3px;text-transform:uppercase;color:rgba(0,229,255,0.5);font-family:'JetBrains Mono',monospace}
+        .brand-text span{color:var(--cyan);font-weight:700}
+        .stats{display:flex;gap:32px;text-align:right}
+        .stat-block .label{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:rgba(0,229,255,0.4);font-family:'JetBrains Mono',monospace;margin-bottom:2px}
+        .stat-block .value{font-family:'Outfit',sans-serif;font-weight:900;font-size:36px;color:var(--cyan);line-height:1;transition:color 0.3s}
+        .bottom{display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap}
+        .ctrl-panel{background:var(--panel);border:1px solid var(--border);padding:20px;border-radius:14px;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);min-width:280px}
+        .ctrl-panel h3{font-size:10px;letter-spacing:3px;text-transform:uppercase;color:rgba(0,229,255,0.4);font-family:'JetBrains Mono',monospace;margin-bottom:14px}
+        .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:transparent;border:1px solid var(--border);color:var(--cyan);padding:10px 18px;border-radius:8px;font-family:'JetBrains Mono',monospace;font-size:12px;cursor:pointer;transition:all 0.25s;letter-spacing:1px;text-transform:uppercase;white-space:nowrap;user-select:none}
+        .btn:hover{background:rgba(0,229,255,0.08);border-color:var(--cyan);box-shadow:0 0 30px rgba(0,229,255,0.2)}
+        .btn.active{border-color:var(--green);color:var(--green);box-shadow:0 0 20px rgba(57,255,20,0.15)}
+        .btn.recording{border-color:var(--magenta);color:var(--magenta);animation:pulse-border 1s infinite}
+        .btn.wide{width:100%;margin-bottom:8px}
+        @keyframes pulse-border{0%,100%{box-shadow:0 0 10px rgba(255,45,170,0.2)}50%{box-shadow:0 0 25px rgba(255,45,170,0.5)}}
+        .section-toggles{display:flex;gap:6px;margin-bottom:12px}
+        .section-toggles .btn{flex:1;font-size:10px;padding:8px 6px}
+        #log{font-family:'JetBrains Mono',monospace;font-size:10px;color:rgba(0,229,255,0.35);height:36px;overflow:hidden;margin-top:8px;line-height:1.8}
+        .styles-panel{max-width:200px}
+        .style-slot{display:flex;align-items:center;justify-content:space-between;padding:6px 10px;border:1px solid rgba(0,229,255,0.08);border-radius:6px;margin-bottom:4px;font-size:11px;font-family:'JetBrains Mono',monospace;cursor:pointer;transition:0.2s;color:rgba(0,229,255,0.4)}
+        .style-slot:hover{border-color:var(--cyan);color:var(--cyan)}
+        .style-slot.filled{color:var(--cyan)}
+        .style-slot .si{opacity:0.4;cursor:pointer;font-size:13px}
+        .style-slot .si:hover{opacity:1}
+        .hand-indicator{position:fixed;width:24px;height:24px;border-radius:50%;border:2px solid var(--cyan);z-index:100;pointer-events:none;transition:left 0.08s ease-out,top 0.08s ease-out;box-shadow:0 0 15px rgba(0,229,255,0.4);display:none}
+        canvas#waveform{position:fixed;bottom:0;left:0;width:100%;height:60px;z-index:5;opacity:0.4}
+        .text-input-row{display:flex;gap:6px;margin-bottom:8px}
+        .text-input-row input{flex:1;background:rgba(0,0,0,0.6);border:1px solid var(--border);color:var(--cyan);padding:10px 12px;border-radius:8px;font-family:'JetBrains Mono',monospace;font-size:12px;outline:none}
+        .text-input-row input:focus{border-color:var(--cyan)}
+        .text-input-row input::placeholder{color:rgba(0,229,255,0.2)}
+        .text-input-row button{flex-shrink:0;width:44px;font-size:16px;padding:0}
     </style>
 </head>
 <body>
-
 <video id="video" autoplay playsinline></video>
-<canvas id="canvas"></canvas>
-
-<div id="ui">
-    <div class="label">System Controls</div>
-    <button onclick="initSystem()">Initialize Orchestra</button>
-    <button onclick="startVoice()">Voice Control</button>
-    <button onclick="startPitch()">Humming Mode</button>
-    <div id="status">System Offline - Awaiting Initialization...</div>
+<canvas id="main"></canvas>
+<canvas id="waveform"></canvas>
+<div class="hand-indicator" id="hand-dot"></div>
+<div class="ui">
+    <div class="top-bar">
+        <div class="brand">
+            <svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="14" cy="14" r="12" stroke="var(--cyan)" stroke-width="1" opacity="0.3"/><circle cx="14" cy="14" r="6" stroke="var(--cyan)" stroke-width="1.5"/><circle cx="14" cy="14" r="2" fill="var(--cyan)"/></svg>
+            <div class="brand-text"><span>Conductive</span> v5.0</div>
+        </div>
+        <div class="stats">
+            <div class="stat-block"><div class="label">Tempo</div><div class="value" id="bpm-val">115</div></div>
+            <div class="stat-block"><div class="label">Energy</div><div class="value" id="energy-val">50</div></div>
+            <div class="stat-block"><div class="label">Key</div><div class="value" id="key-val" style="font-size:24px">Cm</div></div>
+        </div>
+    </div>
+    <div class="bottom">
+        <div class="ctrl-panel">
+            <h3>Engine</h3>
+            <button class="btn wide" id="init-btn">▶ Initialize</button>
+            <div class="text-input-row">
+                <input type="text" id="cmd-input" placeholder="e.g. make it cinematic…">
+                <button class="btn" id="cmd-send">→</button>
+            </div>
+            <button class="btn wide" id="voice-btn">🎤 Voice Command</button>
+            <div class="section-toggles">
+                <button class="btn active" data-section="rhythm">Rhythm</button>
+                <button class="btn active" data-section="lead">Lead</button>
+                <button class="btn" data-section="atmosphere">Atmo</button>
+                <button class="btn" data-section="bass">Bass</button>
+            </div>
+            <div id="log">Click Initialize to start.</div>
+        </div>
+        <div class="ctrl-panel styles-panel">
+            <h3>Styles</h3>
+            <div id="style-slots"></div>
+        </div>
+    </div>
 </div>
-
 <script>
-// ---------------- 1. GLOBAL STATE ----------------
-let orchestratorState = {
-    global: { tempo: 90, intensity: 0.5, volume: 0.6 },
-    sections: {
-        drums:   { active: true,  density: 0.8, character: "punchy" },
-        bass:    { active: false, density: 0.6, character: "smooth" },
-        flute:   { active: true,  density: 0.5, character: "airy" },
-        strings: { active: false, density: 0.4, character: "soft" }
-    }
+const GEMINI_KEY = '_HmuE45nOcdtX5YCDFOh-do';
+const engine = {
+    tempo:115, energy:0.5, chordIndex:0, key:'C', mode:'minor',
+    chords:[["C3","Eb3","G3"],["Ab2","C3","Eb3"],["Bb2","D3","F3"],["G2","B2","D3"]],
+    sections:{rhythm:true,lead:true,atmosphere:false,bass:false},
+    filterCutoff:2000
 };
+const KEYS = {
+    'C':{minor:[["C3","Eb3","G3"],["Ab2","C3","Eb3"],["Bb2","D3","F3"],["G2","B2","D3"]],major:[["C3","E3","G3"],["F2","A2","C3"],["G2","B2","D3"],["A2","C3","E3"]]},
+    'D':{minor:[["D3","F3","A3"],["Bb2","D3","F3"],["C3","E3","G3"],["A2","Db3","E3"]],major:[["D3","Gb3","A3"],["G2","B2","D3"],["A2","Db3","E3"],["B2","D3","Gb3"]]},
+    'E':{minor:[["E3","G3","B3"],["C3","E3","G3"],["D3","Gb3","A3"],["B2","Eb3","Gb3"]],major:[["E3","Ab3","B3"],["A2","Db3","E3"],["B2","Eb3","Gb3"],["Db3","E3","Ab3"]]},
+    'F':{minor:[["F3","Ab3","C4"],["Db3","F3","Ab3"],["Eb3","G3","Bb3"],["C3","E3","G3"]],major:[["F3","A3","C4"],["Bb2","D3","F3"],["C3","E3","G3"],["D3","F3","A3"]]},
+    'G':{minor:[["G3","Bb3","D4"],["Eb3","G3","Bb3"],["F3","A3","C4"],["D3","Gb3","A3"]],major:[["G3","B3","D4"],["C3","E3","G3"],["D3","Gb3","A3"],["E3","G3","B3"]]},
+    'A':{minor:[["A3","C4","E4"],["F3","A3","C4"],["G3","B3","D4"],["E3","Ab3","B3"]],major:[["A3","Db4","E4"],["D3","Gb3","A3"],["E3","Ab3","B3"],["Gb3","A3","Db4"]]}
+};
+let synths={},effects={},analyser=null,booted=false;
+const savedStyles=Array(4).fill(null);
 
-const scale = ["C", "D", "E", "G", "A"]; // C Major Pentatonic
-let step = 0;
+// BOOT
+document.getElementById('init-btn').addEventListener('click', boot);
+async function boot(){
+    if(booted)return;
+    try{await Tone.start()}catch(e){log("Audio blocked: "+e.message);return}
+    booted=true;
+    const btn=document.getElementById('init-btn');
+    btn.textContent='● Online';btn.classList.add('active');
 
-// ---------------- 2. AUDIO ENGINE ----------------
-let flute, kick, snare, bass, strings, globalReverb, globalFilter;
+    effects.reverb=new Tone.Reverb({decay:5,wet:0.3}).toDestination();
+    effects.filter=new Tone.Filter(engine.filterCutoff,"lowpass").connect(effects.reverb);
+    effects.delay=new Tone.FeedbackDelay("8n.",0.35).connect(effects.filter);
+    effects.chorus=new Tone.Chorus(4,2.5,0.5).connect(effects.reverb).start();
+    effects.comp=new Tone.Compressor(-18,4).toDestination();
+    analyser=new Tone.Analyser('waveform',256);
+    Tone.Destination.connect(analyser);
 
-async function initSystem() {
-    await Tone.start();
-    
-    // Effects
-    globalReverb = new Tone.Reverb({ decay: 4, wet: 0.3 }).toDestination();
-    globalFilter = new Tone.Filter({ type: "lowpass", frequency: 5000 }).toDestination();
+    synths.kick=new Tone.MembraneSynth({pitchDecay:0.05,octaves:5,volume:-6,envelope:{attack:0.001,decay:0.3,sustain:0,release:0.3}}).connect(effects.comp);
+    synths.hat=new Tone.MetalSynth({volume:-20,frequency:300,envelope:{attack:0.001,decay:0.06,release:0.01},harmonicity:5.1,modulationIndex:32,resonance:2000,octaves:1.5}).connect(effects.filter);
+    synths.perc=new Tone.NoiseSynth({volume:-14,noise:{type:'white'},envelope:{attack:0.001,decay:0.13,sustain:0}}).connect(effects.filter);
+    synths.lead=new Tone.MonoSynth({oscillator:{type:"sine"},volume:-12,envelope:{attack:0.08,decay:0.3,sustain:0.3,release:0.8},filterEnvelope:{attack:0.06,decay:0.4,sustain:0,release:0.8,baseFrequency:300,octaves:5}}).connect(effects.delay);
+    synths.pad=new Tone.PolySynth(Tone.Synth,{oscillator:{type:"fatsawtooth",count:3,spread:40},volume:-18,envelope:{attack:2,decay:1,sustain:0.8,release:3}}).connect(effects.chorus);
+    synths.bass=new Tone.MonoSynth({oscillator:{type:"triangle"},volume:-10,envelope:{attack:0.01,decay:0.3,sustain:0.5,release:0.4},filterEnvelope:{attack:0.01,decay:0.2,sustain:0,release:0.5,baseFrequency:80,octaves:3}}).connect(effects.comp);
 
-    // Instruments
-    flute = new Tone.Synth({ oscillator: { type: "sine" } }).connect(globalReverb);
-    kick = new Tone.MembraneSynth().toDestination();
-    snare = new Tone.NoiseSynth({ envelope: { attack: 0.001, decay: 0.2, sustain: 0 } }).toDestination();
-    bass = new Tone.MonoSynth({ oscillator: { type: "square" }, envelope: { attack: 0.1 } }).connect(globalFilter);
-    strings = new Tone.PolySynth(Tone.Synth).connect(globalReverb);
-
-    // Transport Loop
-    const kickPattern =  [1, 0, 0, 1, 0, 0, 1, 0];
-    const snarePattern = [0, 0, 1, 0, 0, 0, 1, 0];
-    const bassPattern =  [1, 0, 1, 0, 1, 1, 0, 0];
-
-    new Tone.Loop(time => {
-        const intensity = orchestratorState.global.intensity;
-
-        if (orchestratorState.sections.drums.active) {
-            if (kickPattern[step] && Math.random() < orchestratorState.sections.drums.density) 
-                kick.triggerAttackRelease("C1", "8n", time, intensity);
-            if (snarePattern[step] && Math.random() < orchestratorState.sections.drums.density) 
-                snare.triggerAttackRelease("16n", time, intensity * 0.7);
+    let step=0;
+    new Tone.Loop(time=>{
+        const e=engine.energy, chord=engine.chords[engine.chordIndex];
+        if(step%32===0){
+            engine.chordIndex=(engine.chordIndex+1)%engine.chords.length;
+            if(engine.sections.atmosphere) synths.pad.triggerAttackRelease(engine.chords[engine.chordIndex],"2m",time,e*0.25);
         }
-
-        if (orchestratorState.sections.bass.active && bassPattern[step]) {
-            bass.triggerAttackRelease(scale[0] + "1", "16n", time, intensity * 0.6);
+        if(engine.sections.rhythm){
+            if(step%8===0||(step%8===3&&e>0.7)||(step%8===6&&e>0.85)) synths.kick.triggerAttackRelease("C1","8n",time,Math.min(e*1.1,1));
+            if(step%8===4||(step%16===10&&e>0.55)) synths.perc.triggerAttackRelease("16n",time,e*0.4);
+            if(e>0.3&&(step%4===0||(step%2===0&&e>0.6))) synths.hat.triggerAttackRelease("32n",time,e*0.1);
         }
-
-        if (orchestratorState.sections.flute.active && step % 2 === 0 && Math.random() < orchestratorState.sections.flute.density) {
-            flute.triggerAttackRelease(scale[Math.floor(Math.random()*5)] + "4", "16n", time, intensity * 0.5);
+        if(engine.sections.bass&&step%8===0){
+            const root=chord[0].replace(/\d/,'2');
+            synths.bass.triggerAttackRelease(root,"4n",time,e*0.7);
         }
-
-        if (orchestratorState.sections.strings.active && step === 0) {
-            strings.triggerAttackRelease([scale[0]+"3", scale[2]+"3", scale[4]+"3"], "1m", time, intensity * 0.3);
+        if(engine.sections.lead&&Math.random()<e*0.7){
+            if(step%4===0||(step%4===2&&Math.random()<0.4)){
+                const note=chord[Math.floor(Math.random()*3)].replace(/[23]/,Math.random()>0.5?'5':'4');
+                synths.lead.triggerAttackRelease(note,Math.random()>0.5?"8n":"16n",time,e*0.3);
+            }
         }
+        step=(step+1)%64;
+    },"16n").start(0);
 
-        step = (step + 1) % 8;
-    }, "16n").start(0);
-
-    Tone.Transport.bpm.value = orchestratorState.global.tempo;
+    Tone.Transport.bpm.value=engine.tempo;
     Tone.Transport.start();
-    updateStatus("Orchestra Live");
+    requestAnimationFrame(renderLoop);
+    log("Engine online. Speak or type to conduct.");
 }
 
-// ---------------- 3. DISPATCHER (THE BRIDGE) ----------------
-function dispatchCommand(data) {
-    if (data.tempo_change) {
-        orchestratorState.global.tempo += data.tempo_change;
-        Tone.Transport.bpm.rampTo(orchestratorState.global.tempo, 1);
-    }
-    if (data.intensity !== undefined) orchestratorState.global.intensity = data.intensity;
-
-    if (data.sections) {
-        data.sections.forEach(sec => {
-            let target = orchestratorState.sections[sec.name];
-            if (!target) return;
-            if (sec.action === "add") target.active = true;
-            if (sec.action === "remove") target.active = false;
-            if (sec.density_change) target.density = Math.max(0, Math.min(1, target.density + sec.density_change));
-            if (sec.character) applyCharacter(sec.name, sec.character);
+// GEMINI AI
+async function interpret(input){
+    if(!input||!input.trim())return;
+    log('Interpreting: "'+input+'"');
+    if(!GEMINI_KEY){localFallback(input);return}
+    const prompt='You are the AI brain of Conductive, a gestural music engine. Return ONLY valid JSON, no markdown, no code fences.\n\nAvailable keys: C,D,E,F,G,A. Modes: minor,major.\nReturn: {"tempo":number(40-200),"energy":number(0-1),"rhythm":bool,"atmosphere":bool,"lead":bool,"bass":bool,"key":"letter","mode":"minor|major","filterCutoff":number(100-8000)}\nOnly include fields that should change. Interpret poetic language musically.\n\nCurrent: tempo='+engine.tempo+', energy='+engine.energy+', key='+engine.key+' '+engine.mode+', rhythm='+engine.sections.rhythm+', lead='+engine.sections.lead+', atmosphere='+engine.sections.atmosphere+', bass='+engine.sections.bass+', filterCutoff='+engine.filterCutoff+'\n\nCommand: "'+input+'"';
+    try{
+        const res=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key='+GEMINI_KEY,{
+            method:"POST",headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({contents:[{parts:[{text:prompt}]}]})
         });
-    }
-    updateStatus(`Engine Updated: ${orchestratorState.global.tempo}BPM`);
+        const data=await res.json();
+        if(!data.candidates?.[0]?.content?.parts?.[0]?.text){log("AI empty — fallback.");localFallback(input);return}
+        const raw=data.candidates[0].content.parts[0].text.replace(/```json|```/g,'').trim();
+        applyAI(JSON.parse(raw));
+    }catch(e){console.error(e);log("AI error — fallback.");localFallback(e)}
+}
+function applyAI(j){
+    if(j.tempo)engine.tempo=Math.max(40,Math.min(200,j.tempo));
+    if(j.energy!==undefined)engine.energy=Math.max(0,Math.min(1,j.energy));
+    if(j.filterCutoff)engine.filterCutoff=Math.max(100,Math.min(8000,j.filterCutoff));
+    if(j.key&&KEYS[j.key])engine.key=j.key;
+    if(j.mode==='major'||j.mode==='minor')engine.mode=j.mode;
+    ['rhythm','lead','atmosphere','bass'].forEach(s=>{if(j[s]!==undefined)engine.sections[s]=!!j[s]});
+    if(KEYS[engine.key]?.[engine.mode])engine.chords=KEYS[engine.key][engine.mode];
+    if(booted){Tone.Transport.bpm.rampTo(engine.tempo,2);effects.filter.frequency.rampTo(engine.filterCutoff,1)}
+    syncToggles();updateUI();
+    log('→ '+engine.tempo+'bpm, '+Math.round(engine.energy*100)+'%, '+engine.key+(engine.mode==='minor'?'m':''));
+}
+function localFallback(cmd){
+    const t=(typeof cmd==='string'?cmd:'').toLowerCase();
+    if(t.match(/chill|calm|slow|soft|gentle|quiet/)){engine.tempo=78;engine.energy=0.25}
+    else if(t.match(/hype|dance|party|energy|fast|hard|drop/)){engine.tempo=130;engine.energy=0.9}
+    else if(t.match(/dark|heavy|intense|aggress/)){engine.tempo=95;engine.energy=0.75;engine.mode='minor'}
+    else if(t.match(/bright|happy|major|uplift/)){engine.mode='major';engine.energy=0.6}
+    else if(t.match(/cinematic|epic|film/)){engine.tempo=90;engine.energy=0.6;engine.sections.atmosphere=true;engine.sections.bass=true}
+    if(t.includes('pad')||t.includes('atmo'))engine.sections.atmosphere=true;
+    if(t.includes('bass'))engine.sections.bass=true;
+    if(KEYS[engine.key]?.[engine.mode])engine.chords=KEYS[engine.key][engine.mode];
+    if(booted)Tone.Transport.bpm.rampTo(engine.tempo,2);
+    syncToggles();updateUI();
+    log('Local → '+engine.tempo+'bpm, '+Math.round(engine.energy*100)+'%');
 }
 
-function applyCharacter(section, style) {
-    if (section === 'bass') {
-        globalFilter.frequency.rampTo(style === 'smooth' ? 400 : 4000, 1);
-    }
-    if (section === 'strings') {
-        globalReverb.wet.rampTo(style === 'airy' ? 0.8 : 0.2, 1);
-    }
-}
-
-// ---------------- 4. INPUTS (GESTURE / VOICE / PITCH) ----------------
-
-// Hand Tracking
-const hands = new Hands({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
-hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.5 });
-hands.onResults(results => {
-    if (results.multiHandLandmarks.length > 0) {
-        const y = results.multiHandLandmarks[0][8].y; // Index finger tip
-        orchestratorState.global.intensity = 1 - y; 
-        // Visual feedback
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
-        ctx.clearRect(0,0,canvas.width,canvas.height);
-        ctx.fillStyle = "#0ff";
-        ctx.beginPath(); ctx.arc(results.multiHandLandmarks[0][8].x * canvas.width, y * canvas.height, 10, 0, Math.PI*2); ctx.fill();
-    }
-});
-const cam = new Camera(document.getElementById('video'), { onFrame: async () => { await hands.send({image: video}); } });
-cam.start();
-
-// Voice (Speech Recognition)
-async function interpret(text) {
-    updateStatus("User: " + text);
-    // MOCK LOGIC for testing without API
-    if(text.includes("bass")) dispatchCommand({"sections": [{"name": "bass", "action": "add", "character": "smooth"}]});
-    if(text.includes("faster")) dispatchCommand({"tempo_change": 20});
-    if(text.includes("stop")) dispatchCommand({"sections": [{"name": "drums", "action": "remove"}]});
-}
-
-function startVoice() {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) return alert("Speech Recognition not supported");
-    const rec = new SpeechRecognition();
-    rec.onresult = (e) => interpret(e.results[e.results.length-1][0].transcript);
+// VOICE
+document.getElementById('voice-btn').addEventListener('click',startVoice);
+function startVoice(){
+    const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+    if(!SR){log("Speech not supported.");return}
+    const rec=new SR();rec.interimResults=false;
+    const btn=document.getElementById('voice-btn');
+    rec.onstart=()=>{btn.classList.add('recording');btn.textContent='● Listening…'};
+    rec.onresult=e=>interpret(e.results[0][0].transcript);
+    rec.onend=()=>{btn.classList.remove('recording');btn.textContent='🎤 Voice Command'};
+    rec.onerror=e=>{btn.classList.remove('recording');btn.textContent='🎤 Voice Command';log("Voice: "+e.error)};
     rec.start();
-    updateStatus("Listening...");
 }
 
-// Pitch Detection (Humming)
-let audioCtx, analyser, dataArray;
-async function startPitch() {
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    const source = audioCtx.createMediaStreamSource(stream);
-    analyser = audioCtx.createAnalyser();
-    source.connect(analyser);
-    dataArray = new Float32Array(analyser.fftSize);
-    updateStatus("Pitch Detection Active");
-    drawPitch();
+// TEXT INPUT
+document.getElementById('cmd-send').addEventListener('click',()=>{const i=document.getElementById('cmd-input');if(i.value.trim()){interpret(i.value.trim());i.value=''}});
+document.getElementById('cmd-input').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('cmd-send').click()});
+
+// TOGGLES
+document.querySelectorAll('[data-section]').forEach(b=>b.addEventListener('click',()=>{const s=b.dataset.section;engine.sections[s]=!engine.sections[s];b.classList.toggle('active')}));
+function syncToggles(){document.querySelectorAll('[data-section]').forEach(b=>b.classList.toggle('active',engine.sections[b.dataset.section]))}
+
+// STYLES
+function renderStyleSlots(){
+    const el=document.getElementById('style-slots');el.innerHTML='';
+    for(let i=0;i<4;i++){
+        const s=savedStyles[i],d=document.createElement('div');
+        d.className='style-slot'+(s?' filled':'');
+        if(s){
+            d.innerHTML='<span>'+s.name+'</span><span class="si" title="Overwrite">⟳</span>';
+            d.querySelector('span').onclick=()=>loadStyle(i);
+            d.querySelector('.si').onclick=e=>{e.stopPropagation();saveStyle(i)};
+        }else{
+            d.innerHTML='<span>Slot '+(i+1)+'</span><span class="si" title="Save">+</span>';
+            d.querySelector('.si').onclick=e=>{e.stopPropagation();saveStyle(i)};
+        }
+        el.appendChild(d);
+    }
+}
+function saveStyle(i){
+    const name=prompt('Style name:','Style '+(i+1));if(!name)return;
+    savedStyles[i]={name,tempo:engine.tempo,energy:engine.energy,key:engine.key,mode:engine.mode,sections:{...engine.sections},filterCutoff:engine.filterCutoff};
+    renderStyleSlots();log('Saved "'+name+'"');
+}
+function loadStyle(i){
+    const s=savedStyles[i];if(!s)return;
+    engine.tempo=s.tempo;engine.energy=s.energy;engine.key=s.key;engine.mode=s.mode;engine.filterCutoff=s.filterCutoff;engine.sections={...s.sections};
+    if(KEYS[engine.key]?.[engine.mode])engine.chords=KEYS[engine.key][engine.mode];
+    if(booted){Tone.Transport.bpm.rampTo(engine.tempo,2);effects.filter.frequency.rampTo(engine.filterCutoff,0.5)}
+    syncToggles();updateUI();log('Loaded "'+s.name+'"');
+}
+renderStyleSlots();
+
+// HAND TRACKING — async, never blocks
+const handDot=document.getElementById('hand-dot');
+setTimeout(()=>{
+    const s1=document.createElement('script');
+    s1.src='https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js';
+    s1.onload=()=>{
+        const s2=document.createElement('script');
+        s2.src='https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js';
+        s2.onload=()=>{
+            try{
+                const h=new Hands({locateFile:f=>'https://cdn.jsdelivr.net/npm/@mediapipe/hands/'+f});
+                h.setOptions({maxNumHands:1,modelComplexity:1,minDetectionConfidence:0.65,minTrackingConfidence:0.5});
+                h.onResults(r=>{
+                    if(r.multiHandLandmarks?.[0]){
+                        const p=r.multiHandLandmarks[0][9];
+                        engine.energy=Math.max(0,Math.min(1,1-p.y));
+                        engine.filterCutoff=200+p.x*6000;
+                        if(booted)effects.filter?.frequency.rampTo(engine.filterCutoff,0.1);
+                        updateUI();
+                        handDot.style.display='block';
+                        handDot.style.left=((1-p.x)*window.innerWidth-12)+'px';
+                        handDot.style.top=(p.y*window.innerHeight-12)+'px';
+                    }else{handDot.style.display='none'}
+                });
+                const v=document.getElementById('video');
+                new Camera(v,{onFrame:async()=>{try{await h.send({image:v})}catch(e){}},width:320,height:240}).start();
+            }catch(e){console.log("MediaPipe skipped:",e)}
+        };
+        s2.onerror=()=>console.log("Camera utils failed.");
+        document.head.appendChild(s2);
+    };
+    s1.onerror=()=>console.log("MediaPipe failed.");
+    document.head.appendChild(s1);
+},1500);
+
+// VISUALS
+const mainCanvas=document.getElementById('main'),mCtx=mainCanvas.getContext('2d');
+const wfCanvas=document.getElementById('waveform'),wCtx=wfCanvas.getContext('2d');
+const particles=[];
+class Particle{
+    constructor(x,y){this.x=x;this.y=y;this.vx=(Math.random()-0.5)*2.5;this.vy=(Math.random()-0.5)*2.5;this.life=1;this.decay=0.006+Math.random()*0.012;this.size=1+Math.random()*2.5}
+    update(){this.x+=this.vx;this.y+=this.vy;this.vy-=0.015;this.life-=this.decay}
+}
+function renderLoop(){
+    const W=mainCanvas.width=window.innerWidth,H=mainCanvas.height=window.innerHeight;
+    const t=performance.now()*0.001,e=engine.energy;
+    mCtx.clearRect(0,0,W,H);
+    const grad=mCtx.createRadialGradient(W/2,H/2,0,W/2,H/2,W*0.55);
+    grad.addColorStop(0,'rgba(0,'+(30+e*50|0)+','+(50+e*70|0)+','+(0.06+e*0.06)+')');
+    grad.addColorStop(1,'transparent');
+    mCtx.fillStyle=grad;mCtx.fillRect(0,0,W,H);
+    const cx=W/2,cy=H/2,baseR=80+e*130;
+    mCtx.beginPath();
+    for(let a=0;a<Math.PI*2;a+=0.04){
+        const n=Math.sin(a*6+t*3)*15*e+Math.sin(a*3-t*2)*8*e;
+        const r=baseR+n,px=cx+Math.cos(a)*r,py=cy+Math.sin(a)*r;
+        a===0?mCtx.moveTo(px,py):mCtx.lineTo(px,py);
+    }
+    mCtx.closePath();mCtx.strokeStyle='rgba(0,229,255,'+(0.12+e*0.3)+')';mCtx.lineWidth=1.5;
+    mCtx.shadowBlur=30*e;mCtx.shadowColor='#00e5ff';mCtx.stroke();mCtx.shadowBlur=0;
+    mCtx.beginPath();mCtx.arc(cx,cy,baseR*0.35,0,Math.PI*2);
+    mCtx.strokeStyle='rgba(0,229,255,'+(0.04+e*0.08)+')';mCtx.stroke();
+    if(Math.random()<e*0.35){const a=Math.random()*Math.PI*2;particles.push(new Particle(cx+Math.cos(a)*baseR,cy+Math.sin(a)*baseR))}
+    for(let i=particles.length-1;i>=0;i--){
+        const p=particles[i];p.update();
+        if(p.life<=0){particles.splice(i,1);continue}
+        mCtx.beginPath();mCtx.arc(p.x,p.y,p.size*p.life,0,Math.PI*2);
+        mCtx.fillStyle='rgba(0,229,255,'+p.life*0.45+')';mCtx.fill();
+    }
+    if(particles.length>180)particles.splice(0,particles.length-180);
+    if(analyser){
+        wfCanvas.width=W;wfCanvas.height=60;
+        const wave=analyser.getValue();wCtx.clearRect(0,0,W,60);
+        wCtx.beginPath();wCtx.moveTo(0,30);
+        for(let i=0;i<wave.length;i++)wCtx.lineTo((i/wave.length)*W,30+wave[i]*50);
+        wCtx.strokeStyle='rgba(0,229,255,0.3)';wCtx.lineWidth=1;wCtx.stroke();
+    }
+    requestAnimationFrame(renderLoop);
 }
 
-function drawPitch() {
-    analyser.getFloatTimeDomainData(dataArray);
-    // Simple autocorrelation placeholder for pitch
-    requestAnimationFrame(drawPitch);
+function updateUI(){
+    document.getElementById('bpm-val').textContent=Math.round(engine.tempo);
+    document.getElementById('energy-val').textContent=Math.round(engine.energy*100);
+    document.getElementById('key-val').textContent=engine.key+(engine.mode==='minor'?'m':'');
+    document.getElementById('energy-val').style.color=engine.energy>0.7?'var(--green)':'var(--cyan)';
 }
-
-function updateStatus(t) { document.getElementById("status").innerText = t; }
-
+function log(msg){document.getElementById('log').textContent='> '+msg}
 </script>
 </body>
 </html>
