@@ -194,21 +194,21 @@ function gURL(){return'https://generativelanguage.googleapis.com/v1beta/models/'
 // PluckSynth: triggerAttackRelease(note, duration, time) — NO velocity
 // PolySynth: triggerAttackRelease(notes, duration, time, velocity)
 const SF={
-    kick:()=>new Tone.MembraneSynth({pitchDecay:0.05,octaves:5,volume:-4,envelope:{attack:0.001,decay:0.25,sustain:0,release:0.2}}),
-    snare:()=>new Tone.NoiseSynth({volume:-10,noise:{type:'white'},envelope:{attack:0.001,decay:0.13,sustain:0}}),
-    hihat:()=>new Tone.MetalSynth({volume:-14,frequency:300,envelope:{attack:0.001,decay:0.06,release:0.01},harmonicity:5.1,modulationIndex:32,resonance:2500,octaves:1.5}),
-    clap:()=>new Tone.NoiseSynth({volume:-10,noise:{type:'pink'},envelope:{attack:0.005,decay:0.18,sustain:0}}),
-    perc:()=>new Tone.MetalSynth({volume:-14,frequency:800,envelope:{attack:0.001,decay:0.1,release:0.01},harmonicity:3,modulationIndex:16,resonance:3000,octaves:1}),
-    subbass:()=>new Tone.MonoSynth({oscillator:{type:"sine"},volume:-6,envelope:{attack:0.01,decay:0.4,sustain:0.6,release:0.3},filterEnvelope:{attack:0.01,decay:0.1,sustain:0,release:0.3,baseFrequency:40,octaves:2}}),
-    synbass:()=>new Tone.MonoSynth({oscillator:{type:"sawtooth"},volume:-10,envelope:{attack:0.01,decay:0.2,sustain:0.4,release:0.3},filterEnvelope:{attack:0.01,decay:0.15,sustain:0,release:0.4,baseFrequency:100,octaves:3}}),
-    lead:()=>new Tone.MonoSynth({oscillator:{type:"sine"},volume:-10,envelope:{attack:0.06,decay:0.25,sustain:0.3,release:0.6},filterEnvelope:{attack:0.05,decay:0.3,sustain:0,release:0.6,baseFrequency:400,octaves:4}}),
-    pluck:()=>new Tone.PluckSynth({volume:-10,resonance:0.9,release:1.2}),
-    bell:()=>new Tone.MetalSynth({volume:-12,frequency:600,envelope:{attack:0.001,decay:0.8,release:0.3},harmonicity:12,modulationIndex:20,resonance:800,octaves:2}),
-    arp:()=>new Tone.MonoSynth({oscillator:{type:"square"},volume:-12,envelope:{attack:0.01,decay:0.1,sustain:0.1,release:0.2},filterEnvelope:{attack:0.01,decay:0.1,sustain:0,release:0.2,baseFrequency:500,octaves:3}}),
-    pad:()=>new Tone.PolySynth(Tone.Synth,{oscillator:{type:"fatsawtooth",count:3,spread:40},volume:-16,envelope:{attack:2.5,decay:1,sustain:0.8,release:3}}),
-    strings:()=>new Tone.PolySynth(Tone.Synth,{oscillator:{type:"fatsawtooth",count:5,spread:20},volume:-16,envelope:{attack:1.5,decay:0.5,sustain:0.9,release:2.5}}),
-    choir:()=>new Tone.PolySynth(Tone.Synth,{oscillator:{type:"sine"},volume:-18,envelope:{attack:2,decay:1,sustain:0.7,release:3}}),
-    texture:()=>new Tone.NoiseSynth({volume:-22,noise:{type:'brown'},envelope:{attack:3,decay:2,sustain:0.3,release:4}}),
+    kick:()=>new Tone.MembraneSynth({pitchDecay:0.05,octaves:5,volume:-2,envelope:{attack:0.001,decay:0.25,sustain:0,release:0.2}}),
+    snare:()=>new Tone.NoiseSynth({volume:-6,noise:{type:'white'},envelope:{attack:0.001,decay:0.15,sustain:0}}),
+    hihat:()=>new Tone.MetalSynth({volume:-8,frequency:300,envelope:{attack:0.001,decay:0.08,release:0.01},harmonicity:5.1,modulationIndex:32,resonance:2500,octaves:1.5}),
+    clap:()=>new Tone.NoiseSynth({volume:-6,noise:{type:'pink'},envelope:{attack:0.005,decay:0.2,sustain:0}}),
+    perc:()=>new Tone.MetalSynth({volume:-6,frequency:800,envelope:{attack:0.001,decay:0.15,release:0.02},harmonicity:3,modulationIndex:16,resonance:3000,octaves:1}),
+    subbass:()=>new Tone.MonoSynth({oscillator:{type:"sine"},volume:-4,envelope:{attack:0.01,decay:0.4,sustain:0.6,release:0.3},filterEnvelope:{attack:0.01,decay:0.1,sustain:0,release:0.3,baseFrequency:40,octaves:2}}),
+    synbass:()=>new Tone.MonoSynth({oscillator:{type:"sawtooth"},volume:-6,envelope:{attack:0.01,decay:0.2,sustain:0.4,release:0.3},filterEnvelope:{attack:0.01,decay:0.15,sustain:0,release:0.4,baseFrequency:100,octaves:3}}),
+    lead:()=>new Tone.MonoSynth({oscillator:{type:"sine"},volume:-6,envelope:{attack:0.06,decay:0.25,sustain:0.4,release:0.6},filterEnvelope:{attack:0.05,decay:0.3,sustain:0.1,release:0.6,baseFrequency:400,octaves:5}}),
+    pluck:()=>new Tone.PluckSynth({volume:-4,resonance:0.9,release:1.2}),
+    bell:()=>new Tone.MetalSynth({volume:-6,frequency:600,envelope:{attack:0.001,decay:1,release:0.4},harmonicity:12,modulationIndex:20,resonance:800,octaves:2}),
+    arp:()=>new Tone.MonoSynth({oscillator:{type:"square"},volume:-6,envelope:{attack:0.01,decay:0.15,sustain:0.2,release:0.3},filterEnvelope:{attack:0.01,decay:0.15,sustain:0.1,release:0.3,baseFrequency:800,octaves:4}}),
+    pad:()=>new Tone.PolySynth(Tone.Synth,{oscillator:{type:"fatsawtooth",count:3,spread:40},volume:-10,envelope:{attack:2.5,decay:1,sustain:0.8,release:3}}),
+    strings:()=>new Tone.PolySynth(Tone.Synth,{oscillator:{type:"fatsawtooth",count:5,spread:20},volume:-10,envelope:{attack:1.5,decay:0.5,sustain:0.9,release:2.5}}),
+    choir:()=>new Tone.PolySynth(Tone.Synth,{oscillator:{type:"sine"},volume:-12,envelope:{attack:2,decay:1,sustain:0.7,release:3}}),
+    texture:()=>new Tone.NoiseSynth({volume:-16,noise:{type:'brown'},envelope:{attack:3,decay:2,sustain:0.3,release:4}}),
 };
 const SBUS={kick:'comp',snare:'filt',hihat:'filt',clap:'filt',perc:'del',subbass:'comp',synbass:'comp',lead:'del',pluck:'del',bell:'cho',arp:'del',pad:'wide',strings:'cho',choir:'wide',texture:'rev'};
 
@@ -235,7 +235,7 @@ const E={tempo:110,energy:0.5,ci:0,key:'C',mode:'minor',
 
 Object.entries(INS).forEach(([id,d])=>{
     E.inst[id]={on:['kick','snare','hihat','synbass','lead'].includes(id),a:d.a,t:d.t,
-        pan:Math.sin(d.a*Math.PI/180),vol:TV[d.t],userVol:0.8,
+        pan:Math.sin(d.a*Math.PI/180),vol:TV[d.t],userVol:1.0,
         pat:Array.from({length:ST},()=>[]),usePat:false};
 });
 
@@ -440,9 +440,9 @@ async function boot(){
         const ch=E.chords[E.ci];
         // Atmo (generative only)
         if(cStep%32===0){
-            ['pad','strings'].forEach(id=>{const st=E.inst[id];if(st?.on&&!st.usePat&&sy[id])trigPoly(sy[id],ch,"2m",time,e*0.25)});
-            if(E.inst.choir?.on&&!E.inst.choir?.usePat&&sy.choir)trigPoly(sy.choir,ch.map(n=>n.replace(/\d/,'4')),"2m",time,e*0.2);
-            if(E.inst.texture?.on&&!E.inst.texture?.usePat&&sy.texture)trigRhythm(sy.texture,"2m",time,e*0.15);
+            ['pad','strings'].forEach(id=>{const st=E.inst[id];if(st?.on&&!st.usePat&&sy[id])trigPoly(sy[id],ch,"2m",time,e*0.4+0.2)});
+            if(E.inst.choir?.on&&!E.inst.choir?.usePat&&sy.choir)trigPoly(sy.choir,ch.map(n=>n.replace(/\d/,'4')),"2m",time,e*0.35+0.15);
+            if(E.inst.texture?.on&&!E.inst.texture?.usePat&&sy.texture)trigRhythm(sy.texture,"2m",time,e*0.3+0.15);
         }
         // All instruments
         Object.entries(E.inst).forEach(([id,st])=>{
@@ -469,13 +469,13 @@ async function boot(){
 function pStep(id,d,ch,v,t,e){
     const b=d.b;
     if(d.c==='rhythm'){
-        if(b==='kick')trigNote(sy[id],"C1","8n",t,e);
-        else trigRhythm(sy[id],"16n",t,e*0.5); // snare/hihat/clap/perc
+        if(b==='kick')trigNote(sy[id],"C1","8n",t,e*0.7+0.3);
+        else trigRhythm(sy[id],"16n",t,e*0.6+0.3); // snare/hihat/clap/perc — all get audible velocity
     }else{
         v.forEach(ns=>{
             if(b==='pluck')trigPluck(sy[id],ns,"8n",t);
-            else if(b==='bell')trigRhythm(sy[id],"16n",t,e*0.35);
-            else trigNote(sy[id],ns,"8n",t,e*0.35);
+            else if(b==='bell')trigRhythm(sy[id],"8n",t,e*0.5+0.3);
+            else trigNote(sy[id],ns,"8n",t,e*0.5+0.3);
         });
     }
     flash(id);
@@ -485,17 +485,17 @@ function pStep(id,d,ch,v,t,e){
 function gen(id,d,ch,s,t,e,arpS){
     const b=d.b;
     switch(b){
-        case'kick':if(s%8===0||(s%8===3&&e>0.6)||(s%8===6&&e>0.8)){trigNote(sy[id],"C1","8n",t,Math.min(e*1.1,1));flash(id)}break;
-        case'snare':if(s%8===4||(s%16===10&&e>0.5)){trigRhythm(sy[id],"16n",t,e*0.5);flash(id)}break;
-        case'hihat':if(e>0.2&&(s%4===0||(s%2===0&&e>0.55))){trigRhythm(sy[id],"32n",t,e*0.4);flash(id)}break;
-        case'clap':if(s%8===4&&e>0.4){trigRhythm(sy[id],"16n",t,e*0.5);flash(id)}break;
-        case'perc':if(s%4===2&&Math.random()<e*0.35){trigRhythm(sy[id],"32n",t,e*0.35);flash(id)}break;
-        case'subbass':if(s%8===0){trigNote(sy[id],ch[0].replace(/\d/,'1'),"4n",t,e*0.6);flash(id)}break;
-        case'synbass':if(s%8===0){trigNote(sy[id],ch[0].replace(/\d/,'2'),"4n",t,e*0.5);flash(id)}break;
-        case'lead':if(Math.random()<e*0.55&&(s%4===0||(s%4===2&&Math.random()<0.4))){trigNote(sy[id],ch[Math.floor(Math.random()*3)].replace(/[23]/,Math.random()>0.5?'5':'4'),"8n",t,e*0.3);flash(id)}break;
+        case'kick':if(s%8===0||(s%8===3&&e>0.6)||(s%8===6&&e>0.8)){trigNote(sy[id],"C1","8n",t,Math.min(e+0.3,1));flash(id)}break;
+        case'snare':if(s%8===4||(s%16===10&&e>0.5)){trigRhythm(sy[id],"16n",t,e*0.7+0.2);flash(id)}break;
+        case'hihat':if(e>0.15&&(s%4===0||(s%2===0&&e>0.45))){trigRhythm(sy[id],"16n",t,e*0.5+0.2);flash(id)}break;
+        case'clap':if(s%8===4){trigRhythm(sy[id],"16n",t,e*0.6+0.2);flash(id)}break;
+        case'perc':if(s%4===2){trigRhythm(sy[id],"16n",t,e*0.5+0.2);flash(id)}break;
+        case'subbass':if(s%8===0){trigNote(sy[id],ch[0].replace(/\d/,'1'),"4n",t,e*0.7+0.2);flash(id)}break;
+        case'synbass':if(s%8===0){trigNote(sy[id],ch[0].replace(/\d/,'2'),"4n",t,e*0.6+0.2);flash(id)}break;
+        case'lead':if(Math.random()<e*0.55&&(s%4===0||(s%4===2&&Math.random()<0.4))){trigNote(sy[id],ch[Math.floor(Math.random()*3)].replace(/[23]/,Math.random()>0.5?'5':'4'),"8n",t,e*0.5+0.2);flash(id)}break;
         case'pluck':if(s%8===0){trigPluck(sy[id],ch[Math.floor(Math.random()*3)].replace(/[23]/,'4'),"8n",t);flash(id)}break;
-        case'bell':if(s%8===0&&Math.random()<e*0.3){trigRhythm(sy[id],"8n",t,e*0.35);flash(id)}break;
-        case'arp':if(s%2===0){const ns=[...ch.map(n=>n.replace(/[23]/,'4')),...ch.map(n=>n.replace(/[23]/,'5'))];trigNote(sy[id],ns[arpS%ns.length],"16n",t,e*0.25);flash(id)}break;
+        case'bell':if(s%8===0&&Math.random()<e*0.4){trigRhythm(sy[id],"8n",t,e*0.5+0.2);flash(id)}break;
+        case'arp':if(s%2===0){const ns=[...ch.map(n=>n.replace(/[23]/,'4')),...ch.map(n=>n.replace(/[23]/,'5'))];trigNote(sy[id],ns[arpS%ns.length],"16n",t,e*0.5+0.2);flash(id)}break;
     }
 }
 
