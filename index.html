@@ -48,7 +48,7 @@
         .conduct-hint{position:fixed;top:28%;left:50%;transform:translate(-50%,-50%);font-size:9px;font-family:'JetBrains Mono',monospace;color:rgba(0,229,255,0.08);letter-spacing:2px;text-transform:uppercase;pointer-events:none;z-index:11;transition:opacity 0.6s}
 
         .stage-wrap{flex-shrink:0;padding:0 6px;position:relative}
-        .stage{position:relative;height:240px;overflow:visible}
+        .stage{position:relative;height:300px;overflow:visible}
         canvas#stage-bg{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none}
         .inst-icon{position:absolute;width:46px;height:46px;transform:translate(-50%,-50%);cursor:grab;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:50%;border:1.5px solid rgba(0,229,255,0.1);background:rgba(4,8,20,0.92);transition:border-color 0.15s,box-shadow 0.15s;user-select:none;z-index:2}
         .inst-icon.inactive{opacity:0.22;border-style:dashed}
@@ -96,7 +96,7 @@
         .text-input-row input::placeholder{color:rgba(0,229,255,0.1)}
         .text-input-row .btn{flex-shrink:0;width:32px;padding:0}
         #log{font-family:'JetBrains Mono',monospace;font-size:7px;color:rgba(0,229,255,0.2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px}
-        @media(max-width:700px){.inst-icon{width:38px;height:38px}.inst-icon .sym{font-size:12px}.stage{height:200px}.stat-block .value{font-size:16px}}
+        @media(max-width:700px){.inst-icon{width:38px;height:38px}.inst-icon .sym{font-size:12px}.stage{height:250px}.stat-block .value{font-size:16px}}
     </style>
 </head>
 <body>
@@ -181,21 +181,21 @@ const SYNTH_FACTORIES={
 const SYNTH_BUS={kick:'comp',snare:'filter',hihat:'filter',clap:'filter',perc:'delay',subbass:'comp',synbass:'comp',lead:'delay',pluck:'delay',bell:'chorus',arp:'delay',pad:'wide',strings:'chorus',choir:'wide',texture:'reverb'};
 
 const INSTRUMENTS={
-    kick:{cat:'rhythm',name:'Kick',sym:'◉',angle:-35,tier:0,base:'kick'},
-    snare:{cat:'rhythm',name:'Snare',sym:'◎',angle:-15,tier:0,base:'snare'},
+    kick:{cat:'rhythm',name:'Kick',sym:'◉',angle:-55,tier:0,base:'kick'},
+    snare:{cat:'rhythm',name:'Snare',sym:'◎',angle:-25,tier:0,base:'snare'},
     hihat:{cat:'rhythm',name:'HiHat',sym:'✧',angle:5,tier:0,base:'hihat'},
-    clap:{cat:'rhythm',name:'Clap',sym:'✦',angle:25,tier:0,base:'clap'},
-    perc:{cat:'rhythm',name:'Perc',sym:'◇',angle:45,tier:1,base:'perc'},
-    subbass:{cat:'bass',name:'Sub',sym:'≋',angle:-10,tier:1,base:'subbass'},
-    synbass:{cat:'bass',name:'Bass',sym:'≈',angle:10,tier:1,base:'synbass'},
-    lead:{cat:'melodic',name:'Lead',sym:'♪',angle:-25,tier:2,base:'lead'},
-    pluck:{cat:'melodic',name:'Pluck',sym:'⊕',angle:0,tier:2,base:'pluck'},
-    bell:{cat:'melodic',name:'Bell',sym:'♦',angle:25,tier:2,base:'bell'},
-    arp:{cat:'melodic',name:'Arp',sym:'↯',angle:45,tier:2,base:'arp'},
-    pad:{cat:'atmo',name:'Pad',sym:'◐',angle:-40,tier:3,base:'pad'},
-    strings:{cat:'atmo',name:'Strings',sym:'∿',angle:-15,tier:3,base:'strings'},
-    choir:{cat:'atmo',name:'Choir',sym:'❂',angle:15,tier:3,base:'choir'},
-    texture:{cat:'atmo',name:'Texture',sym:'░',angle:40,tier:3,base:'texture'},
+    clap:{cat:'rhythm',name:'Clap',sym:'✦',angle:30,tier:0,base:'clap'},
+    perc:{cat:'rhythm',name:'Perc',sym:'◇',angle:55,tier:1,base:'perc'},
+    subbass:{cat:'bass',name:'Sub',sym:'≋',angle:-15,tier:1,base:'subbass'},
+    synbass:{cat:'bass',name:'Bass',sym:'≈',angle:15,tier:1,base:'synbass'},
+    lead:{cat:'melodic',name:'Lead',sym:'♪',angle:-40,tier:2,base:'lead'},
+    pluck:{cat:'melodic',name:'Pluck',sym:'⊕',angle:-5,tier:2,base:'pluck'},
+    bell:{cat:'melodic',name:'Bell',sym:'♦',angle:30,tier:2,base:'bell'},
+    arp:{cat:'melodic',name:'Arp',sym:'↯',angle:55,tier:2,base:'arp'},
+    pad:{cat:'atmo',name:'Pad',sym:'◐',angle:-55,tier:3,base:'pad'},
+    strings:{cat:'atmo',name:'Strings',sym:'∿',angle:-20,tier:3,base:'strings'},
+    choir:{cat:'atmo',name:'Choir',sym:'❂',angle:20,tier:3,base:'choir'},
+    texture:{cat:'atmo',name:'Texture',sym:'░',angle:55,tier:3,base:'texture'},
 };
 
 let cloneCount=0;
@@ -247,8 +247,9 @@ function setAPI(s,err){
     if(err)document.getElementById('api-err').textContent='Error: '+err;
 }
 
-const GEMINI_MODEL = 'gemini-2.5-flash-preview-04-17';
-function geminiURL(){return 'https://generativelanguage.googleapis.com/v1beta/models/'+GEMINI_MODEL+':generateContent?key='+geminiKey}
+const GEMINI_MODELS = ['gemini-2.5-flash','gemini-2.0-flash']; // try in order
+let geminiModelIdx=0;
+function geminiURL(){return 'https://generativelanguage.googleapis.com/v1beta/models/'+GEMINI_MODELS[geminiModelIdx]+':generateContent?key='+geminiKey}
 
 async function geminiCall(prompt, systemInstruction, retries){
     const retryDelays=[1000,2000,4000];
@@ -277,10 +278,19 @@ async function geminiCall(prompt, systemInstruction, retries){
 
 async function testAPI(){
     if(!geminiKey){setAPI('off');return}
-    setAPI('checking');
-    const result=await geminiCall('Reply with just the word OK');
-    if(result.ok){setAPI('connected');document.getElementById('api-drop').classList.remove('open');log("AI connected — "+GEMINI_MODEL)}
-    else{setAPI('offline',result.error)}
+    for(let i=0;i<GEMINI_MODELS.length;i++){
+        geminiModelIdx=i;
+        setAPI('checking');
+        const result=await geminiCall('Reply with just the word OK');
+        if(result.ok){
+            setAPI('connected');
+            document.getElementById('api-drop').classList.remove('open');
+            log("AI connected — "+GEMINI_MODELS[i]);
+            return;
+        }
+        console.log('Model '+GEMINI_MODELS[i]+' failed:',result.error);
+    }
+    setAPI('offline','All models failed. Check key at ai.google.dev');
 }
 
 // ═══ SCALE NOTES ═══
@@ -304,12 +314,12 @@ function getPatternNotes(id){
 
 // ═══ STAGE ═══
 const stageEl=document.getElementById('stage'),stageBg=document.getElementById('stage-bg'),sbCtx=stageBg.getContext('2d');
-function sGeo(){const r=stageEl.getBoundingClientRect();const W=r.width,H=r.height,cx=W/2,cy=H+8,minR=50,maxR=H-8,ts=(maxR-minR)/(TIERS-1);return{W,H,cx,cy,minR,maxR,ts}}
+function sGeo(){const r=stageEl.getBoundingClientRect();const W=r.width,H=r.height,cx=W/2,cy=H+10,minR=45,maxR=H-5,ts=(maxR-minR)/(TIERS-1);return{W,H,cx,cy,minR,maxR,ts}}
 function tR(t,g){return g.minR+t*g.ts}
 function atXY(a,t){const g=sGeo(),r=tR(t,g),rd=a*Math.PI/180;return{x:g.cx+Math.sin(rd)*r,y:g.cy-Math.cos(rd)*r}}
-function xyAT(x,y){const g=sGeo(),dx=x-g.cx,dy=g.cy-y,dist=Math.sqrt(dx*dx+dy*dy),a=Math.atan2(dx,dy)*180/Math.PI,t=Math.round(Math.max(0,Math.min(TIERS-1,(dist-g.minR)/g.ts)));return{angle:Math.max(-75,Math.min(75,a)),tier:t}}
+function xyAT(x,y){const g=sGeo(),dx=x-g.cx,dy=g.cy-y,dist=Math.sqrt(dx*dx+dy*dy),a=Math.atan2(dx,dy)*180/Math.PI,t=Math.round(Math.max(0,Math.min(TIERS-1,(dist-g.minR)/g.ts)));return{angle:Math.max(-80,Math.min(80,a)),tier:t}}
 
-function drawArcs(){const g=sGeo();stageBg.width=g.W;stageBg.height=g.H;const c=sbCtx;c.clearRect(0,0,g.W,g.H);for(let t=0;t<TIERS;t++){const r=tR(t,g);c.beginPath();c.arc(g.cx,g.cy,r,Math.PI+0.35,-0.35);c.strokeStyle='rgba(0,229,255,'+(0.03+(TIERS-1-t)*0.012)+')';c.lineWidth=1;c.stroke();const v=Math.round(TIER_VOLS[t]*100);const lx=g.cx+Math.sin(72*Math.PI/180)*r+4;const ly=g.cy-Math.cos(72*Math.PI/180)*r;c.font='6px JetBrains Mono';c.fillStyle='rgba(0,229,255,0.06)';c.fillText(v+'%',lx,ly)}c.beginPath();c.moveTo(g.cx,g.cy-g.minR+8);c.lineTo(g.cx,g.cy-g.maxR-3);c.strokeStyle='rgba(0,229,255,0.025)';c.stroke()}
+function drawArcs(){const g=sGeo();stageBg.width=g.W;stageBg.height=g.H;const c=sbCtx;c.clearRect(0,0,g.W,g.H);for(let t=0;t<TIERS;t++){const r=tR(t,g);c.beginPath();c.arc(g.cx,g.cy,r,Math.PI+0.2,-0.2);c.strokeStyle='rgba(0,229,255,'+(0.03+(TIERS-1-t)*0.012)+')';c.lineWidth=1;c.stroke();const v=Math.round(TIER_VOLS[t]*100);const lx=g.cx+Math.sin(78*Math.PI/180)*r+4;const ly=g.cy-Math.cos(78*Math.PI/180)*r;c.font='6px JetBrains Mono';c.fillStyle='rgba(0,229,255,0.06)';c.fillText(v+'%',lx,ly)}c.beginPath();c.moveTo(g.cx,g.cy-g.minR+8);c.lineTo(g.cx,g.cy-g.maxR-3);c.strokeStyle='rgba(0,229,255,0.025)';c.stroke()}
 
 function buildStage(){
     stageEl.querySelectorAll('.inst-icon').forEach(e=>e.remove());
@@ -420,12 +430,14 @@ async function boot(){
 
     effects.master=new Tone.Gain(0.8).toDestination();
     effects.reverb=new Tone.Reverb({decay:5,wet:0.3}).connect(effects.master);
+    await effects.reverb.ready; // CRITICAL: wait for impulse response
     effects.filter=new Tone.Filter(engine.filterCutoff,"lowpass").connect(effects.reverb);
     effects.delay=new Tone.FeedbackDelay("8n.",0.3).connect(effects.filter);
     effects.chorus=new Tone.Chorus(3,2.5,0.5).connect(effects.reverb).start();
     effects.comp=new Tone.Compressor(-16,4).connect(effects.master);
     effects.wide=new Tone.StereoWidener(0.6).connect(effects.reverb);
     analyser=new Tone.Analyser('waveform',256);effects.master.connect(analyser);
+    console.log("Effects chain ready");
 
     function wire(id){
         const def=INSTRUMENTS[id],base=def.base||id;
@@ -469,6 +481,8 @@ async function boot(){
     },"16n").start(0);
 
     Tone.Transport.bpm.value=engine.tempo;Tone.Transport.start();
+    // Quick test — play a single kick to confirm audio works
+    setTimeout(()=>{try{synths.kick?.triggerAttackRelease?.("C1","8n",undefined,0.5);console.log("Audio test: kick fired")}catch(e){console.error("Audio test failed:",e)}},500);
     buildStage();requestAnimationFrame(renderLoop);
     log("Live. Conduct above stage, tap icons to edit.");
     document.getElementById('conduct-hint').style.opacity='1';
@@ -478,11 +492,11 @@ async function boot(){
 function playStep(id,def,chord,vals,time,e){
     const base=def.base||id;
     if(def.cat==='rhythm'){
-        ({kick:()=>synths[id]?.triggerAttackRelease?.("C1","8n",time,e),snare:()=>synths[id]?.triggerAttackRelease?.("16n",time,e*0.4),hihat:()=>synths[id]?.triggerAttackRelease?.("32n",time,e*0.1),clap:()=>synths[id]?.triggerAttackRelease?.("16n",time,e*0.3),perc:()=>synths[id]?.triggerAttackRelease?.("32n",time,e*0.12)})[base]?.();
+        ({kick:()=>synths[id]?.triggerAttackRelease?.("C1","8n",time,e),snare:()=>synths[id]?.triggerAttackRelease?.("16n",time,e*0.4),hihat:()=>synths[id]?.triggerAttackRelease?.("32n",time,e*0.35),clap:()=>synths[id]?.triggerAttackRelease?.("16n",time,e*0.5),perc:()=>synths[id]?.triggerAttackRelease?.("32n",time,e*0.3)})[base]?.();
     }else{
         vals.forEach(noteStr=>{
-            if(base==='pluck')synths[id]?.triggerAttackRelease?.(noteStr,time);
-            else if(base==='bell')synths[id]?.triggerAttackRelease?.("16n",time,e*0.1);
+            if(base==='pluck')synths[id]?.triggerAttackRelease?.(noteStr,"8n",time);
+            else if(base==='bell')synths[id]?.triggerAttackRelease?.("16n",time,e*0.3);
             else synths[id]?.triggerAttackRelease?.(noteStr,"8n",time,e*0.3);
         });
     }
@@ -494,14 +508,14 @@ function genPlay(id,def,chord,s16,abs,time,e,arpS){
     switch(base){
         case'kick':if(s16%8===0||(s16%8===3&&e>0.65)||(s16%8===6&&e>0.8)){synths[id]?.triggerAttackRelease?.("C1","8n",time,Math.min(e*1.1,1));flashIcon(id)}break;
         case'snare':if(s16%8===4||(s16%16===10&&e>0.5)){synths[id]?.triggerAttackRelease?.("16n",time,e*0.4);flashIcon(id)}break;
-        case'hihat':if(e>0.2&&(s16%4===0||(s16%2===0&&e>0.6))){synths[id]?.triggerAttackRelease?.("32n",time,e*0.08);flashIcon(id)}break;
-        case'clap':if(s16%16===4){synths[id]?.triggerAttackRelease?.("16n",time,e*0.3);flashIcon(id)}break;
-        case'perc':if(Math.random()<e*0.2&&s16%4===2){synths[id]?.triggerAttackRelease?.("32n",time,e*0.1);flashIcon(id)}break;
+        case'hihat':if(e>0.2&&(s16%4===0||(s16%2===0&&e>0.6))){synths[id]?.triggerAttackRelease?.("32n",time,e*0.35);flashIcon(id)}break;
+        case'clap':if(s16%16===4){synths[id]?.triggerAttackRelease?.("16n",time,e*0.5);flashIcon(id)}break;
+        case'perc':if(Math.random()<e*0.2&&s16%4===2){synths[id]?.triggerAttackRelease?.("32n",time,e*0.3);flashIcon(id)}break;
         case'subbass':if(s16%8===0){synths[id]?.triggerAttackRelease?.(chord[0].replace(/\d/,'1'),"4n",time,e*0.6);flashIcon(id)}break;
         case'synbass':if(s16%8===0){synths[id]?.triggerAttackRelease?.(chord[0].replace(/\d/,'2'),"4n",time,e*0.5);flashIcon(id)}break;
         case'lead':if(Math.random()<e*0.6&&(s16%4===0||(s16%4===2&&Math.random()<0.35))){synths[id]?.triggerAttackRelease?.(chord[Math.floor(Math.random()*3)].replace(/[23]/,Math.random()>0.5?'5':'4'),"8n",time,e*0.25);flashIcon(id)}break;
-        case'pluck':if(s16%8===0){synths[id]?.triggerAttackRelease?.(chord[Math.floor(Math.random()*3)].replace(/[23]/,'4'),time);flashIcon(id)}break;
-        case'bell':if(Math.random()<e*0.12&&s16%8===0){synths[id]?.triggerAttackRelease?.("16n",time,e*0.08);flashIcon(id)}break;
+        case'pluck':if(s16%8===0){synths[id]?.triggerAttackRelease?.(chord[Math.floor(Math.random()*3)].replace(/[23]/,'4'),"8n",time);flashIcon(id)}break;
+        case'bell':if(Math.random()<e*0.15&&s16%8===0){synths[id]?.triggerAttackRelease?.("16n",time,e*0.3);flashIcon(id)}break;
         case'arp':if(s16%2===0){const ns=[...chord.map(n=>n.replace(/[23]/,'4')),...chord.map(n=>n.replace(/[23]/,'5'))];synths[id]?.triggerAttackRelease?.(ns[arpS%ns.length],"16n",time,e*0.2);flashIcon(id)}break;
     }
 }
