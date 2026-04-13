@@ -188,13 +188,14 @@ const STYPE={kick:'note',snare:'noise',hihat:'note',clap:'noise',perc:'note',sub
 // Synth/Mono/Membrane: uses (note, dur, time, vel)
 // PolySynth: note=array, uses (notes, dur, time, vel)
 function trig(id,note,dur,time,vel){
-    const s=sy[id];if(!s)return;
-    const type=STYPE[INS[id]?.b]||'note';
+    const s=sy[id];if(!s){console.warn('No synth:',id);return}
+    const b=INS[id]?.b;
+    const type=STYPE[b]||'note';
     try{
         if(type==='noise')s.triggerAttackRelease(dur,time,vel);
         else if(type==='poly')s.triggerAttackRelease(note,dur,time,vel);
         else s.triggerAttackRelease(note,dur,time,vel);
-    }catch(e){console.warn('trig '+id,e)}
+    }catch(e){console.warn('trig fail',id,type,note,dur,e.message)}
 }
 
 const INS={
@@ -327,8 +328,15 @@ async function boot(){
         Tone.Draw.schedule(()=>{upPH();upPC()},time);
     },"16n").start(0);
     Tone.Transport.bpm.value=E.tempo;Tone.Transport.start();
+    // Boot test — play kick once to confirm audio chain works
+    setTimeout(()=>{
+        try{
+            sy.kick.triggerAttackRelease("C1","8n",undefined,0.5);
+            console.log("✓ Boot test: kick played");
+        }catch(e){console.error("✗ Boot test failed:",e)}
+    },300);
     buildStage();requestAnimationFrame(renderViz);
-    lg("Live.");
+    lg("Live. 1 finger=point · 2 fingers=tempo");
 }
 
 function pS(id,d,ch,v,time,e){
