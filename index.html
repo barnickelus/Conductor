@@ -257,7 +257,10 @@ window.addEventListener('resize',()=>{drawArcs();Object.entries(E.inst).forEach(
 function setVol(v){if(!selI)return;E.inst[selI].uv=v/100;if(gn[selI])gn[selI].gain.rampTo(E.inst[selI].vol*E.inst[selI].uv,0.1)}
 function cloneI(){if(!selI||!booted)return;const src=INS[selI],st=E.inst[selI];cloneN++;const nid=src.b+'_c'+cloneN;INS[nid]={c:src.c,n:src.n+' '+cloneN,s:src.s,a:st.a+8,t:st.t,b:src.b};STYPE[nid]=STYPE[src.b];E.inst[nid]={on:true,a:st.a+8,t:st.t,pan:Math.sin((st.a+8)*Math.PI/180),vol:TV[st.t],uv:st.uv,pat:st.pat.map(p=>[...p]),up:st.up};const bus=SBUS[src.b]||'comp',s2=SF[src.b](),g2=new Tone.Gain(E.inst[nid].vol*E.inst[nid].uv),p2=new Tone.Panner(E.inst[nid].pan);wireS(nid,s2,g2,p2,bus);buildStage();selI=nid;upS();openPat(nid)}
 
-function openPat(id){const d=INS[id],st=E.inst[id];if(!d||!st)return;document.getElementById('ptitle').textContent=d.n;document.getElementById('pw').classList.add('open');document.getElementById('volS').value=Math.round(st.uv*100);const g=document.getElementById('sg'),isR=d.c==='rhythm';g.innerHTML='';g.className='sg '+(isR?'rh':'mel');const nr=isR?[]:pNotes(id);for(let s=0;s<ST;s++){const c=document.createElement('div');c.className='sc';if(isR){if(st.pat[s].length)c.classList.add('on');c.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();st.pat[s]=st.pat[s].length?[]:['hit'];st.up=st.pat.some(p=>p.length);c.classList.toggle('on',st.pat[s].length>0)})}else{nr.forEach(ns=>{const r=document.createElement('div');r.className='nr'+(st.pat[s].includes(ns)?' on':'');r.innerHTML='<span class="nrl">'+ns+'</span>';r.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();const arr=st.pat[s],idx=arr.indexOf(ns);if(idx>=0)arr.splice(idx,1);else arr.push(ns);r.classList.toggle('on',arr.includes(ns));st.up=st.pat.some(p=>p.length)});c.appendChild(r)})}g.appendChild(c)}}
+function openPat(id){const d=INS[id],st=E.inst[id];if(!d||!st)return;document.getElementById('ptitle').textContent=d.n;document.getElementById('pw').classList.add('open');document.getElementById('volS').value=Math.round(st.uv*100);const g=document.getElementById('sg'),isR=d.c==='rhythm';g.innerHTML='';g.className='sg '+(isR?'rh':'mel');const nr=isR?[]:pNotes(id);for(let s=0;s<ST;s++){const c=document.createElement('div');c.className='sc';if(isR){if(st.pat[s].length)c.classList.add('on');c.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();st.pat[s]=st.pat[s].length?[]:['hit'];st.up=st.pat.some(p=>p.length);c.classList.toggle('on',st.pat[s].length>0)})}else{nr.forEach(ns=>{const r=document.createElement('div');r.className='nr'+(st.pat[s].includes(ns)?' on':'');r.innerHTML='<span class="nrl">'+ns+'</span>';r.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();const arr=st.pat[s],idx=arr.indexOf(ns);if(idx>=0)arr.splice(idx,1);else arr.push(ns);r.classList.toggle('on',arr.includes(ns));st.up=st.pat.some(p=>p.length);
+// Store chord root when first note is programmed so patterns follow progression
+if(st.up&&st.patRoot===undefined)st.patRoot=chordRoot(E.chords[E.ci]);
+});c.appendChild(r)})}g.appendChild(c)}}
 function upPH(){if(!selI)return;const cells=document.getElementById('sg').children;const s16=cStep%ST;const st=E.inst[selI];
     for(let i=0;i<ST;i++){if(!cells[i])continue;
         cells[i].classList.toggle('ph',i===s16);
@@ -265,8 +268,8 @@ function upPH(){if(!selI)return;const cells=document.getElementById('sg').childr
         if(!st.up&&st._lastFired===i){cells[i].style.background='rgba(57,255,20,0.12)';setTimeout(()=>{if(cells[i])cells[i].style.background=''},80)}
     }
 }
-function clearP(){if(!selI)return;E.inst[selI].pat=Array.from({length:ST},()=>[]);E.inst[selI].up=false;openPat(selI)}
-function randP(){if(!selI)return;const d=INS[selI],st=E.inst[selI],e=E.energy,nr=d.c==='rhythm'?[]:pNotes(selI);for(let s=0;s<ST;s++){st.pat[s]=[];if(Math.random()<e*0.45){if(d.c==='rhythm')st.pat[s]=['hit'];else{st.pat[s]=[nr[Math.floor(Math.random()*nr.length)]];if(Math.random()<0.2){const n2=nr[Math.floor(Math.random()*nr.length)];if(!st.pat[s].includes(n2))st.pat[s].push(n2)}}}}st.up=true;openPat(selI)}
+function clearP(){if(!selI)return;E.inst[selI].pat=Array.from({length:ST},()=>[]);E.inst[selI].up=false;E.inst[selI].patRoot=undefined;openPat(selI)}
+function randP(){if(!selI)return;const d=INS[selI],st=E.inst[selI],e=E.energy,nr=d.c==='rhythm'?[]:pNotes(selI);for(let s=0;s<ST;s++){st.pat[s]=[];if(Math.random()<e*0.45){if(d.c==='rhythm')st.pat[s]=['hit'];else{st.pat[s]=[nr[Math.floor(Math.random()*nr.length)]];if(Math.random()<0.2){const n2=nr[Math.floor(Math.random()*nr.length)];if(!st.pat[s].includes(n2))st.pat[s].push(n2)}}}}st.up=true;st.patRoot=chordRoot(E.chords[E.ci]);openPat(selI)}
 
 // ═══ CHORD PROG ═══
 function toggleProg(){autoProg=!autoProg;document.getElementById('psw').classList.toggle('on',autoProg);renderPC()}
@@ -339,15 +342,28 @@ async function boot(){
     lg("Live. 1 finger=point · 2 fingers=tempo");
 }
 
+// ═══ TRANSPOSE HELPERS ═══
+const N2S={'C':0,'C#':1,'Db':1,'D':2,'D#':3,'Eb':3,'E':4,'F':5,'F#':6,'Gb':6,'G':7,'G#':8,'Ab':8,'A':9,'A#':10,'Bb':10,'B':11};
+const S2N=['C','C#','D','Eb','E','F','F#','G','Ab','A','Bb','B'];
+function noteToMidi(ns){const m=ns.match(/^([A-G][b#]?)(\d)$/);if(!m)return 60;return N2S[m[1]]+(+m[2]+1)*12}
+function midiToNote(m){return S2N[m%12]+(Math.floor(m/12)-1)}
+function chordRoot(ch){if(!ch||!ch[0])return 0;return N2S[ch[0].replace(/\d/,'')]||0}
+
 function pS(id,d,ch,v,time,e){
-    const b=d.b;
+    const b=d.b,st=E.inst[id];
     if(d.c==='rhythm'){
         if(b==='kick')trig(id,"C1","8n",time,e*0.7+0.3);
         else if(b==='hihat')trig(id,"C8","32n",time,e*0.6+0.3);
         else if(b==='perc')trig(id,"G6","16n",time,e*0.6+0.3);
-        else trig(id,null,"16n",time,e*0.6+0.3); // snare/clap NoiseSynth
+        else trig(id,null,"16n",time,e*0.6+0.3);
     }else{
-        v.forEach(ns=>trig(id,ns,"8n",time,e*0.5+0.3));
+        // Transpose pattern notes to follow chord progression
+        const shift=st.patRoot!==undefined?(chordRoot(ch)-st.patRoot+12)%12:0;
+        v.forEach(ns=>{
+            let note=ns;
+            if(shift!==0){const midi=noteToMidi(ns)+shift;note=midiToNote(midi)}
+            trig(id,note,"8n",time,e*0.5+0.3);
+        });
     }
     flash(id);
 }
