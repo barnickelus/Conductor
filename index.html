@@ -313,13 +313,14 @@ async function boot(){
     let arpS=0;
     new Tone.Loop(time=>{
         const e=E.energy,s16=cStep%ST;
-        if(cStep%32===0&&autoProg)E.ci=(E.ci+1)%E.chords.length;
+        // Chord changes every 16 steps (= 1 pattern cycle)
+        if(cStep%ST===0&&autoProg)E.ci=(E.ci+1)%E.chords.length;
         const ch=E.chords[E.ci];
-        // Atmo
-        if(cStep%32===0){
-            ['pad','strings'].forEach(id=>{const st=E.inst[id];if(st?.on&&!st.up)trig(id,ch,"2m",time,e*0.5+0.3)});
-            if(E.inst.choir?.on&&!E.inst.choir?.up)trig('choir',ch.map(n=>n.replace(/\d/,'4')),"2m",time,e*0.5+0.3);
-            if(E.inst.texture?.on&&!E.inst.texture?.up)trig('texture',ch[0].replace(/\d/,'2'),"2m",time,e*0.3+0.2);
+        // Atmo re-triggers each chord change
+        if(cStep%ST===0){
+            ['pad','strings'].forEach(id=>{const st=E.inst[id];if(st?.on&&!st.up)trig(id,ch,"1m",time,e*0.5+0.3)});
+            if(E.inst.choir?.on&&!E.inst.choir?.up)trig('choir',ch.map(n=>n.replace(/\d/,'4')),"1m",time,e*0.5+0.3);
+            if(E.inst.texture?.on&&!E.inst.texture?.up)trig('texture',ch[0].replace(/\d/,'2'),"1m",time,e*0.3+0.2);
         }
         Object.entries(E.inst).forEach(([id,st])=>{
             if(!st.on)return;const d=INS[id];if(!d||d.c==='atmo'&&!st.up)return;
@@ -357,12 +358,13 @@ function pS(id,d,ch,v,time,e){
         else if(b==='perc')trig(id,"G6","16n",time,e*0.6+0.3);
         else trig(id,null,"16n",time,e*0.6+0.3);
     }else{
-        // Transpose pattern notes to follow chord progression
         const shift=st.patRoot!==undefined?(chordRoot(ch)-st.patRoot+12)%12:0;
+        // Duration varies by category: bass=4n, melodic=8n, atmo=2n
+        const dur=d.c==='bass'?'4n':d.c==='atmo'?'2n':'8n';
         v.forEach(ns=>{
             let note=ns;
             if(shift!==0){const midi=noteToMidi(ns)+shift;note=midiToNote(midi)}
-            trig(id,note,"8n",time,e*0.5+0.3);
+            trig(id,note,dur,time,e*0.5+0.3);
         });
     }
     flash(id);
