@@ -88,8 +88,9 @@ canvas#sbg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 .ppx{background:var(--p);border:1px solid var(--b);border-radius:6px;padding:4px 6px;margin-top:2px}
 .ph{display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;gap:2px}
 .pt{font-size:6px;letter-spacing:1px;text-transform:uppercase;color:var(--c)}
-.pa{display:flex;gap:2px}
-.pa button{background:0;border:1px solid var(--b);color:rgba(0,229,255,0.18);padding:2px 5px;border-radius:2px;font-size:5px;cursor:pointer}.pa button:hover{color:var(--c);border-color:var(--c)}
+.pa{display:flex;gap:6px}
+.pa button{background:0;border:1px solid var(--b);color:rgba(0,229,255,0.25);padding:5px 10px;border-radius:4px;font-size:8px;cursor:pointer;transition:0.12s;min-width:40px;text-align:center}
+.pa button:hover{color:var(--c);border-color:var(--c)}
 .vc{display:flex;align-items:center;gap:2px;margin-left:auto;margin-right:4px}
 .vc label{font-size:4px;color:rgba(0,229,255,0.12);letter-spacing:1px;text-transform:uppercase}
 .vc input[type=range]{-webkit-appearance:none;width:40px;height:2px;background:rgba(0,229,255,0.06);border-radius:1px;outline:none}
@@ -182,13 +183,17 @@ const SBUS={kick:'comp',snare:'comp',hihat:'comp',clap:'comp',perc:'comp',subbas
 // 'noise' = triggerAttackRelease(dur, time, vel) — no note
 const STYPE={kick:'note',snare:'noise',hihat:'note',clap:'noise',perc:'note',subbass:'note',synbass:'note',lead:'note',pluck:'note',bell:'note',arp:'note',violin:'note',cello:'note',pad:'poly',strings:'poly',choir:'poly',texture:'note'};
 
-function trig(id,noteOrDur,dur,time,vel){
+// Universal trigger: trig(id, note, dur, time, vel)
+// NoiseSynth: note ignored, uses (dur, time, vel)
+// Synth/Mono/Membrane: uses (note, dur, time, vel)
+// PolySynth: note=array, uses (notes, dur, time, vel)
+function trig(id,note,dur,time,vel){
     const s=sy[id];if(!s)return;
     const type=STYPE[INS[id]?.b]||'note';
     try{
-        if(type==='noise')s.triggerAttackRelease(noteOrDur,time,vel); // noteOrDur is actually duration
-        else if(type==='poly')s.triggerAttackRelease(noteOrDur,dur,time,vel); // noteOrDur is notes array
-        else s.triggerAttackRelease(noteOrDur,dur,time,vel); // noteOrDur is note string
+        if(type==='noise')s.triggerAttackRelease(dur,time,vel);
+        else if(type==='poly')s.triggerAttackRelease(note,dur,time,vel);
+        else s.triggerAttackRelease(note,dur,time,vel);
     }catch(e){console.warn('trig '+id,e)}
 }
 
@@ -242,14 +247,23 @@ function buildStage(){stg.querySelectorAll('.ic').forEach(e=>e.remove());drawArc
 function tapI(id){if(selI===id){E.inst[id].on=!E.inst[id].on;upS();return}selI=id;upS();openPat(id)}
 function desel(){selI=null;document.getElementById('pw').classList.remove('open');upS()}
 function upS(){Object.keys(INS).forEach(id=>{const el=document.getElementById('i-'+id);if(!el||!E.inst[id])return;el.className='ic'+(E.inst[id].on?' on':' off')+(selI===id?' sel':'')})}
-function flash(id){const el=document.getElementById('i-'+id);if(!el)return;el.classList.add('fire');setTimeout(()=>el.classList.remove('fire'),60)}
+function flash(id){const el=document.getElementById('i-'+id);if(!el)return;el.classList.add('fire');setTimeout(()=>el.classList.remove('fire'),60);
+    // Track which 16th step this fired on for live display
+    E.inst[id]._lastFired=cStep%ST;
+}
 window.addEventListener('resize',()=>{drawArcs();Object.entries(E.inst).forEach(([id,st])=>{const el=document.getElementById('i-'+id);if(!el)return;const p=a2xy(st.a,st.t);el.style.left=p.x+'px';el.style.top=p.y+'px'})});
 
 function setVol(v){if(!selI)return;E.inst[selI].uv=v/100;if(gn[selI])gn[selI].gain.rampTo(E.inst[selI].vol*E.inst[selI].uv,0.1)}
 function cloneI(){if(!selI||!booted)return;const src=INS[selI],st=E.inst[selI];cloneN++;const nid=src.b+'_c'+cloneN;INS[nid]={c:src.c,n:src.n+' '+cloneN,s:src.s,a:st.a+8,t:st.t,b:src.b};STYPE[nid]=STYPE[src.b];E.inst[nid]={on:true,a:st.a+8,t:st.t,pan:Math.sin((st.a+8)*Math.PI/180),vol:TV[st.t],uv:st.uv,pat:st.pat.map(p=>[...p]),up:st.up};const bus=SBUS[src.b]||'comp',s2=SF[src.b](),g2=new Tone.Gain(E.inst[nid].vol*E.inst[nid].uv),p2=new Tone.Panner(E.inst[nid].pan);wireS(nid,s2,g2,p2,bus);buildStage();selI=nid;upS();openPat(nid)}
 
 function openPat(id){const d=INS[id],st=E.inst[id];if(!d||!st)return;document.getElementById('ptitle').textContent=d.n;document.getElementById('pw').classList.add('open');document.getElementById('volS').value=Math.round(st.uv*100);const g=document.getElementById('sg'),isR=d.c==='rhythm';g.innerHTML='';g.className='sg '+(isR?'rh':'mel');const nr=isR?[]:pNotes(id);for(let s=0;s<ST;s++){const c=document.createElement('div');c.className='sc';if(isR){if(st.pat[s].length)c.classList.add('on');c.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();st.pat[s]=st.pat[s].length?[]:['hit'];st.up=st.pat.some(p=>p.length);c.classList.toggle('on',st.pat[s].length>0)})}else{nr.forEach(ns=>{const r=document.createElement('div');r.className='nr'+(st.pat[s].includes(ns)?' on':'');r.innerHTML='<span class="nrl">'+ns+'</span>';r.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();const arr=st.pat[s],idx=arr.indexOf(ns);if(idx>=0)arr.splice(idx,1);else arr.push(ns);r.classList.toggle('on',arr.includes(ns));st.up=st.pat.some(p=>p.length)});c.appendChild(r)})}g.appendChild(c)}}
-function upPH(){if(!selI)return;const cells=document.getElementById('sg').children;const s16=cStep%ST;for(let i=0;i<ST;i++){if(cells[i])cells[i].classList.toggle('ph',i===s16)}}
+function upPH(){if(!selI)return;const cells=document.getElementById('sg').children;const s16=cStep%ST;const st=E.inst[selI];
+    for(let i=0;i<ST;i++){if(!cells[i])continue;
+        cells[i].classList.toggle('ph',i===s16);
+        // Show live generative hits as brief flash
+        if(!st.up&&st._lastFired===i){cells[i].style.background='rgba(57,255,20,0.12)';setTimeout(()=>{if(cells[i])cells[i].style.background=''},80)}
+    }
+}
 function clearP(){if(!selI)return;E.inst[selI].pat=Array.from({length:ST},()=>[]);E.inst[selI].up=false;openPat(selI)}
 function randP(){if(!selI)return;const d=INS[selI],st=E.inst[selI],e=E.energy,nr=d.c==='rhythm'?[]:pNotes(selI);for(let s=0;s<ST;s++){st.pat[s]=[];if(Math.random()<e*0.45){if(d.c==='rhythm')st.pat[s]=['hit'];else{st.pat[s]=[nr[Math.floor(Math.random()*nr.length)]];if(Math.random()<0.2){const n2=nr[Math.floor(Math.random()*nr.length)];if(!st.pat[s].includes(n2))st.pat[s].push(n2)}}}}st.up=true;openPat(selI)}
 
@@ -323,7 +337,7 @@ function pS(id,d,ch,v,time,e){
         if(b==='kick')trig(id,"C1","8n",time,e*0.7+0.3);
         else if(b==='hihat')trig(id,"C8","32n",time,e*0.6+0.3);
         else if(b==='perc')trig(id,"G6","16n",time,e*0.6+0.3);
-        else trig(id,"16n",time,e*0.6+0.3);
+        else trig(id,null,"16n",time,e*0.6+0.3); // snare/clap NoiseSynth
     }else{
         v.forEach(ns=>trig(id,ns,"8n",time,e*0.5+0.3));
     }
@@ -334,9 +348,9 @@ function gen(id,d,ch,s,t,e,arpS){
     const b=d.b,V=e*0.5+0.3; // baseline velocity
     switch(b){
         case'kick':if(s%8===0||(s%8===3&&e>0.6)||(s%8===6&&e>0.8)){trig(id,"C1","8n",t,V);flash(id)}break;
-        case'snare':if(s%8===4||(s%16===10&&e>0.5)){trig(id,"16n",t,V);flash(id)}break;
+        case'snare':if(s%8===4||(s%16===10&&e>0.5)){trig(id,null,"16n",t,V);flash(id)}break;
         case'hihat':if(e>0.1&&(s%4===0||(s%2===0&&e>0.4))){trig(id,"C8","32n",t,V);flash(id)}break;
-        case'clap':if(s%8===4){trig(id,"16n",t,V);flash(id)}break;
+        case'clap':if(s%8===4){trig(id,null,"16n",t,V);flash(id)}break;
         case'perc':if(s%4===2){trig(id,"G6","16n",t,V);flash(id)}break;
         case'subbass':if(s%8===0){trig(id,ch[0].replace(/\d/,'1'),"4n",t,V);flash(id)}break;
         case'synbass':if(s%8===0){trig(id,ch[0].replace(/\d/,'2'),"4n",t,V);flash(id)}break;
@@ -352,13 +366,16 @@ function gen(id,d,ch,s,t,e,arpS){
 document.getElementById('pauseB').addEventListener('click',()=>{if(!booted)return;const p=Tone.Transport.state==='started';if(p){Tone.Transport.pause();document.getElementById('pauseB').textContent='▶';document.getElementById('pauseB').classList.add('pau')}else{Tone.Transport.start();document.getElementById('pauseB').textContent='⏸';document.getElementById('pauseB').classList.remove('pau')}});
 
 // ═══ CONDUCTING ═══
-const trail=[];let cond=false;const cz=document.getElementById('cz');
-function cS(x,y){cond=true;cM(x,y)}
-function cM(x,y){if(!cond||!booted)return;E.energy=Math.max(0,Math.min(1,1-y/window.innerHeight));E.fc=200+(x/window.innerWidth)*7000;if(fx.filt)fx.filt.frequency.rampTo(E.fc,0.08);upUI();trail.push({x,y,t:performance.now()});if(trail.length>80)trail.shift()}
-function cE(){cond=false}
-cz.addEventListener('touchstart',e=>{e.preventDefault();cS(e.touches[0].clientX,e.touches[0].clientY)},{passive:false});
-cz.addEventListener('touchmove',e=>{e.preventDefault();cM(e.touches[0].clientX,e.touches[0].clientY)},{passive:false});
-cz.addEventListener('touchend',cE);cz.addEventListener('mousedown',e=>cS(e.clientX,e.clientY));cz.addEventListener('mousemove',e=>{if(cond)cM(e.clientX,e.clientY)});cz.addEventListener('mouseup',cE);cz.addEventListener('mouseleave',cE);
+// 1 finger: X → boost instruments on that side, Y → energy
+// 2 fingers: vertical drag → tempo
+const trail=[];let cond=false,twoF=false,tfY0=0,tfT0=0;
+const cz=document.getElementById('cz');
+function condS(e){e.preventDefault();if(e.touches&&e.touches.length>=2){twoF=true;tfY0=(e.touches[0].clientY+e.touches[1].clientY)/2;tfT0=E.tempo;return}cond=true;const tx=e.touches?e.touches[0].clientX:e.clientX,ty=e.touches?e.touches[0].clientY:e.clientY;condM(tx,ty)}
+function condD(e){e.preventDefault();if(twoF&&e.touches&&e.touches.length>=2){const y=(e.touches[0].clientY+e.touches[1].clientY)/2,dy=tfY0-y;E.tempo=Math.max(40,Math.min(200,Math.round(tfT0+dy*0.5)));if(booted)Tone.Transport.bpm.rampTo(E.tempo,0.1);upUI();return}if(!cond||!booted)return;const tx=e.touches?e.touches[0].clientX:e.clientX,ty=e.touches?e.touches[0].clientY:e.clientY;condM(tx,ty)}
+function condM(x,y){E.energy=Math.max(0,Math.min(1,1-y/window.innerHeight));const nx=x/window.innerWidth,pa=(nx-0.5)*160;Object.entries(E.inst).forEach(([id,st])=>{if(!gn[id])return;const prox=Math.max(0,1-Math.abs(st.a-pa)/80),boost=1+prox*0.6;gn[id].gain.rampTo(st.vol*st.uv*boost,0.12)});E.fc=200+nx*7000;if(fx.filt)fx.filt.frequency.rampTo(E.fc,0.08);upUI();trail.push({x,y,t:performance.now()});if(trail.length>80)trail.shift()}
+function condE(){cond=false;twoF=false;if(booted)Object.entries(E.inst).forEach(([id,st])=>{if(gn[id])gn[id].gain.rampTo(st.vol*st.uv,0.3)})}
+cz.addEventListener('touchstart',condS,{passive:false});cz.addEventListener('touchmove',condD,{passive:false});cz.addEventListener('touchend',condE);cz.addEventListener('touchcancel',condE);
+cz.addEventListener('mousedown',e=>{cond=true;condM(e.clientX,e.clientY)});cz.addEventListener('mousemove',e=>{if(cond)condM(e.clientX,e.clientY)});cz.addEventListener('mouseup',condE);cz.addEventListener('mouseleave',condE);
 
 // ═══ AI ═══
 async function interp(input){if(!input?.trim())return;lg('…');if(!gKey){fallback(input);return}setAP('chk');const il=Object.entries(INS).map(([k,v])=>k+'('+v.n+')').join(', ');const al=Object.entries(E.inst).filter(([k,v])=>v.on).map(([k])=>k).join(',');const prompt=`You control a live music engine. Return ONLY JSON. No markdown.\nInstruments: ${il}\nKeys: C-B. Modes: minor, major.\n{"tempo":40-200,"energy":0-1,"key":"X","mode":"minor|major","filterCutoff":100-8000,"instruments":{"name":bool}}\nOnly changed fields.\nState: tempo=${E.tempo},energy=${E.energy},key=${E.key} ${E.mode},active=[${al}]\nCommand: "${input}"`;const r=await gCall(prompt,2);if(r.ok){try{applyAI(JSON.parse(r.text.replace(/```json|```/g,'').trim()));setAP('ok')}catch(e){setAP('ok');fallback(input)}}else{setAP('ok');fallback(input)}}
