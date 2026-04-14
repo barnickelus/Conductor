@@ -128,6 +128,9 @@ canvas#sbg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
       <button class="tb m" id="startB">▶ Start</button>
       <button class="tb m" id="pauseB" style="display:none">⏸</button>
       <button class="tb m" id="voiceB">🎤 Speak</button>
+      <button class="tb m" onclick="saveSong()">💾 Save</button>
+      <button class="tb m" onclick="document.getElementById('loadFile').click()">📂 Load</button>
+      <input type="file" id="loadFile" accept=".json" style="display:none" onchange="loadSong(this)">
     </div>
     <div class="tr">
       <div class="apia"><div class="apip m" id="apiP" onclick="document.getElementById('apiDD').classList.toggle('open')"><div class="apid"></div><span id="apiL">No Key</span></div>
@@ -862,6 +865,137 @@ function upUI(){
   document.getElementById('vK').textContent=E.key+(E.mode==='minor'?'m':'');
 }
 function lg(m){document.getElementById('log').textContent='> '+m}
+
+// ═══════════════════════════════════════════
+// SONG SAVE / LOAD
+// ═══════════════════════════════════════════
+function saveSong(){
+  const song = {
+    version: 13,
+    name: prompt('Song name:', 'Untitled') || 'Untitled',
+    timestamp: new Date().toISOString(),
+    tempo: E.tempo,
+    energy: E.energy,
+    key: E.key,
+    mode: E.mode,
+    chords: E.chords,
+    filterCutoff: E.fc,
+    autoProg: autoProg,
+    instruments: {}
+  };
+  // Save each instrument's full state
+  Object.entries(E.inst).forEach(([id, st]) => {
+    const d = DEFS[id];
+    song.instruments[id] = {
+      on: st.on,
+      angle: st.angle,
+      tier: st.tier,
+      uVol: st.uVol,
+      sus: st.sus,
+      pat: st.pat,
+      usePat: st.usePat,
+      patRoot: st.patRoot,
+      // Include def info for cloned instruments
+      isClone: !FACTORY[id],
+      cloneBase: d?.name?.split(' ')[0]?.toLowerCase(),
+    };
+  });
+
+  // Download as JSON
+  const blob = new Blob([JSON.stringify(song, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = song.name.replace(/[^a-zA-Z0-9_-]/g,'_') + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  lg('Saved: ' + song.name);
+}
+
+function loadSong(input){
+  const file = input.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    try {
+      const song = JSON.parse(ev.target.result);
+      applySong(song);
+      lg('Loaded: ' + (song.name || 'song'));
+    } catch(e) {
+      lg('Bad file: ' + e.message);
+    }
+  };
+  reader.readAsText(file);
+  input.value = ''; // reset so same file can be loaded again
+}
+
+function applySong(song){
+  // Core state
+  E.tempo = song.tempo || 110;
+  E.energy = song.energy || 0.5;
+  E.key = song.key || 'C';
+  E.mode = song.mode || 'minor';
+  E.fc = song.filterCutoff || 3500;
+  if(song.chords) E.chords = song.chords;
+  if(song.autoProg !== undefined) { autoProg = song.autoProg; document.getElementById('psw').classList.toggle('on', autoProg); }
+
+  // Update chords from key if not provided
+  if(!song.chords && KEYS_DATA[E.key]?.[E.mode]) E.chords = KEYS_DATA[E.key][E.mode];
+
+  // Instruments
+  if(song.instruments){
+    Object.entries(song.instruments).forEach(([id, saved]) => {
+      if(!E.inst[id]) {
+        // This might be a cloned instrument — recreate it
+        if(saved.isClone && saved.cloneBase && FACTORY[saved.cloneBase]){
+          const base = saved.cloneBase;
+          const srcDef = Object.entries(DEFS).find(([k,v])=>k===base)?.[1];
+          if(srcDef){
+            DEFS[id] = {cat:srcDef.cat, name:id, sym:srcDef.sym, tier:saved.tier||srcDef.tier, angle:saved.angle||0, type:srcDef.type, bus:srcDef.bus, defOn:true};
+            E.inst[id] = {on:true,angle:0,tier:0,pan:0,vol:1,uVol:1,sus:0.5,pat:Array.from({length:ST},()=>[]),usePat:false,patRoot:undefined};
+            // Wire synth if booted
+            if(booted && FACTORY[base]){
+              const s=FACTORY[base](), g=new Tone.Gain(1), p=new Tone.Panner(0);
+              s.connect(g);g.connect(p);p.connect(fx[srcDef.bus]||fx.comp);
+              synths[id]=s;gains[id]=g;panners[id]=p;
+            }
+          }
+        } else return; // unknown instrument, skip
+      }
+
+      const st = E.inst[id];
+      if(saved.on !== undefined) st.on = saved.on;
+      if(saved.angle !== undefined) { st.angle = saved.angle; st.pan = Math.sin(saved.angle * Math.PI/180); }
+      if(saved.tier !== undefined) { st.tier = saved.tier; st.vol = TV[saved.tier]; }
+      if(saved.uVol !== undefined) st.uVol = saved.uVol;
+      if(saved.sus !== undefined) st.sus = saved.sus;
+      if(saved.pat) { st.pat = saved.pat.map(p => Array.isArray(p) ? [...p] : []); }
+      if(saved.usePat !== undefined) st.usePat = saved.usePat;
+      if(saved.patRoot !== undefined) st.patRoot = saved.patRoot;
+
+      // Apply to live audio
+      if(booted){
+        if(gains[id]) gains[id].gain.rampTo(st.vol * st.uVol, 0.1);
+        if(panners[id]) panners[id].pan.value = st.pan;
+        if(synths[id] && saved.sus !== undefined){
+          try{ synths[id].set({envelope:{sustain:st.sus, release:0.1+st.sus*2}}); }catch(e){}
+        }
+      }
+    });
+  }
+
+  // Apply transport
+  if(booted){
+    Tone.Transport.bpm.rampTo(E.tempo, 1);
+    if(fx.filt) fx.filt.frequency.rampTo(E.fc, 0.5);
+  }
+
+  // Refresh UI
+  buildStage();
+  upUI();
+  renderChords();
+  if(selInst) openPat(selInst);
+}
 
 // Init
 buildStage();
