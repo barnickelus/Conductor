@@ -3,7 +3,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Conductive v18</title>
+<title>Conductive v20</title>
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
 <script src="https://cdn.jsdelivr.net/npm/tone@14.7.77/build/Tone.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;700&family=Outfit:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -16,43 +16,47 @@ canvas#viz{position:fixed;inset:0;width:100%;height:100%;z-index:1}
 .ui>*{pointer-events:auto}
 .m{font-family:'JetBrains Mono',monospace}
 
-/* Top Bar */
-.top{display:flex;justify-content:space-between;align-items:center;padding:10px 16px;background:rgba(2,4,9,0.5);backdrop-filter:blur(5px)}
+/* HEADER */
+.top{display:flex;justify-content:space-between;align-items:center;padding:10px 16px;background:rgba(2,4,9,0.5);backdrop-filter:blur(5px);flex-shrink:0}
 .brand{font-size:10px;letter-spacing:3px;text-transform:uppercase;color:rgba(0,229,255,0.4)}.brand b{color:var(--c);font-weight:900}
 .tmid{display:flex;gap:6px;align-items:center}
 .tb{display:inline-flex;align-items:center;justify-content:center;background:rgba(0,229,255,0.05);border:1px solid var(--b);color:var(--c);padding:8px 12px;border-radius:6px;font-size:10px;cursor:pointer;transition:0.2s;font-weight:700;text-transform:uppercase}
 .tb:hover{border-color:var(--c);background:rgba(0,229,255,0.1)}.tb.on{border-color:var(--g);color:var(--g);background:rgba(57,255,20,0.1)}
-
 .stats{display:flex;gap:16px;text-align:right}
 .stat .l{font-size:8px;color:rgba(0,229,255,0.3)}.stat .v{font-weight:900;font-size:20px;color:var(--c);line-height:1}
 
-/* Conduct Zone */
+/* AI COMMAND BAR */
+.cmdb{display:flex;gap:6px;padding:8px 16px;background:rgba(2,4,9,0.5);flex-shrink:0}
+.cmdb input{flex:1;background:rgba(0,0,0,0.4);border:1px solid var(--b);color:var(--c);padding:10px 12px;border-radius:8px;font-size:12px;outline:none}
+.cmdb .tb{width:40px;height:40px;padding:0;font-size:14px}
+
+/* CONDUCTOR SPACE */
 .cz{flex:1;cursor:crosshair;border-top:1px dashed rgba(0,229,255,0.1);border-bottom:1px dashed rgba(0,229,255,0.1);display:flex;align-items:center;justify-content:center;position:relative}
 .conduct-hint{font-size:12px;color:rgba(0,229,255,0.1);letter-spacing:4px;text-transform:uppercase;pointer-events:none}
 
-/* Stage */
-.stw{padding:0 8px}
-.stage{position:relative;height:min(280px,34vh)}
+/* STAGE */
+.stw{padding:0 8px;flex-shrink:0}
+.stage{position:relative;height:min(260px,30vh);overflow:visible}
 canvas#sbg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
-.ic{position:absolute;width:54px;height:54px;transform:translate(-50%,-50%);cursor:grab;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:50%;border:1px solid rgba(0,229,255,0.15);background:rgba(4,8,20,0.9);backdrop-filter:blur(4px);z-index:2;box-shadow:0 4px 12px rgba(0,0,0,0.4)}
+.ic{position:absolute;width:50px;height:50px;transform:translate(-50%,-50%);cursor:grab;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:50%;border:1px solid rgba(0,229,255,0.15);background:rgba(4,8,20,0.9);backdrop-filter:blur(4px);z-index:2;box-shadow:0 4px 12px rgba(0,0,0,0.4)}
 .ic.off{opacity:0.3;border-style:dashed}
 .ic.sel{border-color:var(--c);box-shadow:0 0 15px rgba(0,229,255,0.3);z-index:3;transform:translate(-50%,-50%) scale(1.1)}
-.ic .s{font-size:18px;line-height:1;margin-bottom:2px}.ic .l{font-size:7px;letter-spacing:1px;text-transform:uppercase;color:rgba(0,229,255,0.5)}
+.ic .s{font-size:18px;line-height:1;margin-bottom:2px}.ic .l{font-size:6px;letter-spacing:1px;text-transform:uppercase;color:rgba(0,229,255,0.5);max-width:46px;overflow:hidden;text-overflow:ellipsis;text-align:center}
 .ic .rn{position:absolute;inset:-3px;border-radius:50%;border:2px solid transparent}
 .ic.fire .rn{border-color:var(--g);box-shadow:0 0 8px var(--g)}
 
-/* Chords */
-.pb{padding:8px}
-.pbox{background:var(--p);border:1px solid var(--b);border-radius:8px;padding:8px;display:flex;gap:8px}
+/* CHORDS */
+.pb{padding:8px;flex-shrink:0}
+.pbox{background:var(--p);border:1px solid var(--b);border-radius:8px;padding:8px;display:flex;gap:8px;align-items:center}
 .pcs{display:flex;gap:4px;flex:1}
-.pc{flex:1;text-align:center;padding:10px 4px;border-radius:6px;border:1px solid rgba(0,229,255,0.1);font-size:13px;font-weight:700;color:rgba(0,229,255,0.25);background:rgba(0,0,0,0.2)}
+.pc{flex:1;text-align:center;padding:10px 4px;border-radius:6px;border:1px solid rgba(0,229,255,0.1);font-size:13px;font-weight:700;color:rgba(0,229,255,0.25);background:rgba(0,0,0,0.2);cursor:pointer}
 .pc.act{border-color:var(--c);color:var(--c);background:rgba(0,229,255,0.1)}
 
-/* Pattern Editor */
-.pw{padding:0 8px;max-height:0;transition:all 0.3s ease;opacity:0;overflow:hidden}
-.pw.open{max-height:400px;opacity:1;padding-bottom:10px}
+/* PATTERN EDITOR */
+.pw{padding:0 8px;max-height:0;transition:all 0.3s ease;opacity:0;overflow:hidden;flex-shrink:0}
+.pw.open{max-height:420px;opacity:1;padding-bottom:10px}
 .ppx{background:var(--p);border:1px solid var(--b);border-radius:8px;padding:12px}
-.phdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.phdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:10px;flex-wrap:wrap}
 .ptit{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--c);font-weight:bold}
 .c-togs{display:flex;gap:4px}
 .ctog{width:26px;height:26px;border:1px solid var(--b);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px;color:rgba(0,229,255,0.3);cursor:pointer}
@@ -64,24 +68,29 @@ canvas#sbg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 .sg{display:flex;gap:2px}
 .sc{flex:1;min-width:0;border-radius:3px;background:rgba(0,229,255,0.02);border:1px solid rgba(0,229,255,0.05);position:relative}
 .sc.ph::after{content:'';position:absolute;inset:-1px;border:2px solid var(--g);border-radius:3px;pointer-events:none}
-.sg.rh .sc{height:40px;cursor:pointer}.sg.rh .sc.on{background:rgba(0,229,255,0.3);border-color:var(--c)}
+.sg.rh .sc{height:44px;cursor:pointer}.sg.rh .sc.on{background:rgba(0,229,255,0.3);border-color:var(--c)}
 .sg.mel .sc{display:flex;flex-direction:column;gap:1px;padding:1px}
 .nr{height:16px;border-radius:2px;background:rgba(0,229,255,0.02);cursor:pointer;position:relative}
-.nr.on{background:rgba(0,229,255,0.3);border:1px solid rgba(0,229,255,0.2)}
+.nr.on{background:rgba(0,229,255,0.4);border:1px solid rgba(0,229,255,0.2)}
 .nrl{position:absolute;left:2px;top:50%;transform:translateY(-50%);font-size:6px;color:rgba(0,229,255,0.1);pointer-events:none}
-.nr.on .nrl{color:rgba(0,229,255,0.7)}
+.nr.on .nrl{color:rgba(0,229,255,0.8)}
 </style>
 </head>
 <body>
 <canvas id="viz"></canvas>
 <div class="ui">
   <div class="top">
-    <div class="brand m"><b>Conductive</b> v18</div>
+    <div class="brand m"><b>Conductive</b> v20</div>
     <div class="tmid">
       <button class="tb m" id="startB">▶ Start</button>
       <button class="tb m" id="pauseB" style="display:none">⏸</button>
     </div>
-    <div class="stats m"><div class="stat"><div class="l">BPM</div><div class="v">110</div></div><div class="stat"><div class="l">Key</div><div class="v">Cm</div></div></div>
+    <div class="stats m"><div class="stat"><div class="l">BPM</div><div class="v" id="vB">110</div></div><div class="stat"><div class="l">Key</div><div class="v" id="vK">Cm</div></div></div>
+  </div>
+
+  <div class="cmdb">
+    <input type="text" id="cmdIn" class="m" placeholder="Ask AI to change things... (e.g., 'Violin only', 'Fast tempo')">
+    <button class="tb m" id="cmdGo">→</button>
   </div>
 
   <div class="cz" id="cz"><div class="conduct-hint m">Conducting Space</div></div>
@@ -100,6 +109,7 @@ canvas#sbg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
         <div class="ctog" onclick="togC(3)" id="ctog-3">4</div>
       </div>
       <div class="pact m">
+        <button onclick="clearPat()">Clear</button>
         <button onclick="doRand(true)">Regen</button>
         <button onclick="doRand(false)">Random</button>
         <button onclick="doClone()">Clone</button>
@@ -112,31 +122,37 @@ canvas#sbg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 
 <script>
 const ST=16, TIERS=4, TV=[1, 0.8, 0.6, 0.45];
+
+// ENSEMBLE DEFINITION
 const DEFS = {
   kick:    {cat:'rhythm',  name:'Kick',    sym:'◉', tier:0, type:'note',  bus:'comp', on:true,  angle:-80},
-  snare:   {cat:'rhythm',  name:'Snare',   sym:'◎', tier:0, type:'noise', bus:'comp', on:true,  angle:-40},
-  hihat:   {cat:'rhythm',  name:'HiHat',   sym:'✧', tier:0, type:'note',  bus:'comp', on:true,  angle:0},
-  bass:    {cat:'bass',    name:'Bass',    sym:'≈', tier:1, type:'note',  bus:'comp', on:true,  angle:-20},
-  lead:    {cat:'melodic', name:'Lead',    sym:'♪', tier:2, type:'note',  bus:'del',  on:true,  angle:20},
-  keys:    {cat:'melodic', name:'Keys',    sym:'🎹', tier:2, type:'poly',  bus:'cho',  on:false, angle:50}
+  snare:   {cat:'rhythm',  name:'Snare',   sym:'◎', tier:0, type:'noise', bus:'comp', on:true,  angle:-55},
+  hihat:   {cat:'rhythm',  name:'HiHat',   sym:'✧', tier:0, type:'note',  bus:'comp', on:true,  angle:-30},
+  bass:    {cat:'bass',    name:'Bass',    sym:'≈', tier:1, type:'note',  bus:'comp', on:true,  angle:-15},
+  violin:  {cat:'melodic', name:'Violin',  sym:'🎻', tier:2, type:'note', bus:'rev',  on:true,  angle:10},
+  cello:   {cat:'melodic', name:'Cello',   sym:'🎻', tier:1, type:'note', bus:'rev',  on:true,  angle:35},
+  gurdy:   {cat:'drone',   name:'Gurdy',   sym:'⚙️', tier:2, type:'note', bus:'cho',  on:false, angle:60},
+  keys:    {cat:'melodic', name:'Keys',    sym:'🎹', tier:2, type:'poly', bus:'del',  on:false, angle:0},
 };
 
 const FACTORY = {
-  kick: () => new Tone.MembraneSynth({envelope:{attack:0.001,decay:0.3}}),
-  snare: () => new Tone.NoiseSynth({volume:-6,envelope:{attack:0.001,decay:0.1}}),
-  hihat: () => new Tone.MetalSynth({volume:-20,envelope:{attack:0.001,decay:0.05}}),
-  bass: () => new Tone.MonoSynth({oscillator:{type:"sawtooth"},volume:-6,envelope:{attack:0.01,decay:0.2,sustain:0.4}}),
-  lead: () => new Tone.MonoSynth({oscillator:{type:"triangle"},volume:-4,envelope:{attack:0.05,decay:0.3,sustain:0.3}}),
-  keys: () => new Tone.PolySynth(Tone.Synth,{volume:-8,envelope:{attack:0.02,decay:0.4,sustain:0.5}})
+  kick:    () => new Tone.MembraneSynth({envelope:{attack:0.001,decay:0.3,sustain:0}}),
+  snare:   () => new Tone.NoiseSynth({volume:-6,envelope:{attack:0.001,decay:0.1,sustain:0}}),
+  hihat:   () => new Tone.MetalSynth({volume:-20,envelope:{attack:0.001,decay:0.05}}),
+  bass:    () => new Tone.MonoSynth({oscillator:{type:"sawtooth"},envelope:{attack:0.02,decay:0.2,sustain:0.2}}),
+  violin:  () => new Tone.MonoSynth({oscillator:{type:"fatsawtooth",count:3,spread:20},envelope:{attack:0.1,decay:0.3,sustain:0.4}}),
+  cello:   () => new Tone.MonoSynth({oscillator:{type:"fatsawtooth",count:3,spread:15},envelope:{attack:0.15,decay:0.4,sustain:0.5}}),
+  gurdy:   () => new Tone.MonoSynth({oscillator:{type:"fatsawtooth",count:5,spread:30},envelope:{attack:0.5,decay:0.5,sustain:0.8}}),
+  keys:    () => new Tone.PolySynth(Tone.Synth,{volume:-10,envelope:{attack:0.02,decay:0.3,sustain:0.4,release:1}})
 };
 
 const E = {
-  tempo:110, ci:0, key:'C', mode:'minor',
+  tempo:110, energy:0.5, ci:0, key:'C', mode:'minor',
   chords:[["C3","Eb3","G3"],["Ab2","C3","Eb3"],["Bb2","D3","F3"],["G2","B2","D3"]],
   inst:{}
 };
 
-// State Init
+// Initial State Setup
 Object.entries(DEFS).forEach(([k,d]) => {
   E.inst[k] = { 
     id:k, on:d.on, angle:d.angle, tier:d.tier, pan:Math.sin(d.angle*Math.PI/180), vol:TV[d.tier], uVol:1,
@@ -144,9 +160,9 @@ Object.entries(DEFS).forEach(([k,d]) => {
   };
 });
 
-let synths={}, panners={}, gains={}, fx={}, booted=false, cStep=0, selInst=null, cloneIdx=0;
+let synths={}, panners={}, gains={}, fx={}, booted=false, cStep=0, selInst=null, cloneCount=0;
 
-// UI Logic
+// UI Components
 const stageEl=document.getElementById('stage'), sbg=document.getElementById('sbg'), sbgCtx=sbg.getContext('2d');
 function sGeo(){const r=stageEl.getBoundingClientRect();return{W:r.width,H:r.height,cx:r.width/2,cy:r.height+20,mr:50,ts:(r.height-50-10)/(TIERS-1)}}
 function tierR(t){const g=sGeo(); return g.mr+t*g.ts}
@@ -189,12 +205,20 @@ function tapI(id){ if(selInst===id){E.inst[id].on=!E.inst[id].on; upS(); return}
 function deselect(){selInst=null; document.getElementById('pw').classList.remove('open'); upS()}
 function upS(){ Object.keys(E.inst).forEach(id=>{const el=document.getElementById('i-'+id); if(el)el.className='ic'+(E.inst[id].on?' on':' off')+(selInst===id?' sel':'')})}
 
+function getScale(k,m){
+  const s=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+  const iv=m==='minor'?[0,2,3,5,7,8,10]:[0,2,4,5,7,9,11], ri=s.indexOf(k);
+  return iv.map(i=>s[(ri+i)%12]);
+}
+
 function openP(id){
   const st=E.inst[id], base=id.split('_')[0], d=DEFS[base];
   document.getElementById('ptit').textContent=(d.name+(id.includes('_')?' '+id.split('_')[1]:''));
   document.getElementById('pw').classList.add('open');
   upCT();
-  const g=document.getElementById('sg'), isR=d.cat==='rhythm', notes=['C5','B4','A4','G4','F4','E4','D4','C4'];
+  const g=document.getElementById('sg'), isR=d.cat==='rhythm';
+  const sc=getScale(E.key,E.mode), lo=(d.cat==='bass'||d.cat==='drone')?2:4;
+  const notes=[sc[0]+(lo+1),sc[6]+lo,sc[5]+lo,sc[4]+lo,sc[3]+lo,sc[2]+lo,sc[1]+lo,sc[0]+lo];
   g.innerHTML=''; g.className='sg '+(isR?'rh':'mel');
   for(let s=0;s<ST;s++){
     const cell=document.createElement('div'); cell.className='sc';
@@ -213,16 +237,18 @@ function openP(id){
   }
 }
 
-function doRand(logic){
+function doRand(isLogical){
   if(!selInst)return; const st=E.inst[selInst], base=selInst.split('_')[0], d=DEFS[base];
-  const notes=['C5','B4','A4','G4','F4','E4','D4','C4'];
+  const sc=getScale(E.key,E.mode), lo=(d.cat==='bass'||d.cat==='drone')?2:4;
+  const notes=[sc[0]+(lo+1),sc[6]+lo,sc[5]+lo,sc[4]+lo,sc[3]+lo,sc[2]+lo,sc[1]+lo,sc[0]+lo];
   st.pat=Array.from({length:ST},()=>[]);
   for(let s=0;s<ST;s++){
-    if(logic){
+    if(isLogical){
       if(base==='kick'&&s%4===0) st.pat[s]=['hit'];
       if(base==='snare'&&s%8===4) st.pat[s]=['hit'];
-      if(base==='hihat'&&s%2===0) st.pat[s]=['hit'];
-      if(d.cat==='melodic'&&s%4===0&&Math.random()>0.5) st.pat[s]=[notes[Math.floor(Math.random()*notes.length)]];
+      if(base==='hihat'&&(s%2===0||Math.random()<0.2)) st.pat[s]=['hit'];
+      if(d.cat==='melodic' && s%4===0 && Math.random()<0.4) st.pat[s]=[notes[Math.floor(Math.random()*4)]];
+      if(d.cat==='bass' && s%8===0) st.pat[s]=[notes[7]];
     } else {
       if(Math.random()>0.8) st.pat[s]=d.cat==='rhythm'?['hit']:[notes[Math.floor(Math.random()*notes.length)]];
     }
@@ -231,13 +257,18 @@ function doRand(logic){
 }
 
 function doClone(){
-  if(!selInst)return; cloneIdx++;
-  const base=selInst.split('_')[0], newId=base+'_'+cloneIdx;
+  if(!selInst)return; cloneCount++;
+  const base=selInst.split('_')[0], newId=base+'_'+cloneCount;
   E.inst[newId]=JSON.parse(JSON.stringify(E.inst[selInst]));
-  E.inst[newId].angle+=10; E.inst[newId].id=newId;
+  E.inst[newId].id=newId; E.inst[newId].angle+=15;
+  if(E.inst[newId].angle>85) E.inst[newId].angle=-85;
   if(booted) createS(newId, base);
   buildStage(); tapI(newId);
 }
+
+function clearPat(){ if(selInst){E.inst[selInst].pat=Array.from({length:ST},()=>[]); openP(selInst);}}
+function togC(i){ if(selInst){E.inst[selInst].chordAllowed[i]=!E.inst[selInst].chordAllowed[i]; upCT();}}
+function upCT(){ if(!selInst)return; for(let i=0;i<4;i++){const el=document.getElementById('ctog-'+i); el.className='ctog'+(E.inst[selInst].chordAllowed[i]?' on':'')+(i===E.ci?' cur':'')}}
 
 function createS(id, base){
   const st=E.inst[id], s=FACTORY[base](), g=new Tone.Gain(st.vol*st.uVol), p=new Tone.Panner(st.pan);
@@ -245,15 +276,12 @@ function createS(id, base){
   synths[id]=s; gains[id]=g; panners[id]=p;
 }
 
-function togC(i){ if(selInst){E.inst[selInst].chordAllowed[i]=!E.inst[selInst].chordAllowed[i]; upCT();}}
-function upCT(){ if(!selInst)return; for(let i=0;i<4;i++){const el=document.getElementById('ctog-'+i); el.className='ctog'+(E.inst[selInst].chordAllowed[i]?' on':'')+(i===E.ci?' cur':'')}}
-
 async function start(){
   if(booted) return; await Tone.start(); booted=true;
   document.getElementById('startB').textContent='● Live'; document.getElementById('startB').classList.add('on');
   document.getElementById('pauseB').style.display='';
-  fx.rev=new Tone.Reverb(2).toDestination(); await fx.rev.ready;
-  fx.comp=new Tone.Compressor(-12,4).connect(fx.rev);
+  fx.rev=new Tone.Reverb(2.5).toDestination(); await fx.rev.ready;
+  fx.comp=new Tone.Compressor(-12,3).connect(fx.rev);
   fx.del=new Tone.FeedbackDelay("8n",0.4).connect(fx.rev);
   fx.cho=new Tone.Chorus(4,2.5,0.5).connect(fx.rev).start();
   Object.keys(E.inst).forEach(id=>createS(id, id.split('_')[0]));
@@ -262,10 +290,12 @@ async function start(){
     Object.entries(E.inst).forEach(([id,st])=>{
       if(!st.on||!st.chordAllowed[E.ci]||!st.pat[cStep%ST].length)return;
       const base=id.split('_')[0], d=DEFS[base], ch=E.chords[E.ci], v=st.pat[cStep%ST][0];
-      if(d.cat==='rhythm') synths[id].triggerAttackRelease(d.type==='noise'?'8n':v,'8n',time);
-      else if(d.cat==='bass') synths[id].triggerAttackRelease(ch[0],'8n',time);
-      else synths[id].triggerAttackRelease(d.type==='poly'?ch:v,'8n',time);
-      Tone.Draw.schedule(()=>{document.getElementById('i-'+id)?.classList.add('fire');setTimeout(()=>document.getElementById('i-'+id)?.classList.remove('fire'),60)},time);
+      try {
+        if(d.cat==='rhythm') synths[id].triggerAttackRelease(d.type==='noise'?'8n':v,'8n',time);
+        else if(d.cat==='bass') synths[id].triggerAttackRelease(ch[0],'8n',time);
+        else synths[id].triggerAttackRelease(d.type==='poly'?ch:v,'8n',time);
+        Tone.Draw.schedule(()=>{document.getElementById('i-'+id)?.classList.add('fire');setTimeout(()=>document.getElementById('i-'+id)?.classList.remove('fire'),60)},time);
+      } catch(e){}
     });
     cStep++;
     Tone.Draw.schedule(()=>{
@@ -278,7 +308,7 @@ async function start(){
 }
 
 function renderC(){
-  const el=document.getElementById('pcs'); el.innerHTML='';
+  const el=document.getElementById('pcs'); if(!el)return; el.innerHTML='';
   E.chords.forEach((ch,i)=>{
     const d=document.createElement('div'); d.className='pc m'+(i===E.ci?' act':'');
     d.textContent=ch[0].replace(/\d/,''); el.appendChild(d);
@@ -288,6 +318,7 @@ function renderC(){
 
 document.getElementById('startB').onclick=start;
 document.getElementById('pauseB').onclick=()=>{if(Tone.Transport.state==='started'){Tone.Transport.pause();document.getElementById('pauseB').textContent='▶'}else{Tone.Transport.start();document.getElementById('pauseB').textContent='⏸'}};
+
 window.onload=()=>{ buildStage(); renderC(); };
 </script>
 </body>
