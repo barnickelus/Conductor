@@ -3,7 +3,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Conductive v14</title>
+<title>Conductive v15</title>
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
 <script src="https://cdn.jsdelivr.net/npm/tone@14.7.77/build/Tone.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;700&family=Outfit:wght@300;500;700;900&display=swap" rel="stylesheet">
@@ -62,7 +62,7 @@ canvas#viz{position:fixed;inset:0;width:100%;height:100%;z-index:1}
 
 /* === STAGE === */
 .stw{padding:0 8px;flex-shrink:0}
-.stage{position:relative;height:min(320px,38vh);overflow:visible}
+.stage{position:relative;height:min(300px,36vh);overflow:visible}
 canvas#sbg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 .cpos{position:absolute;bottom:-2px;left:50%;transform:translateX(-50%);font-size:7px;letter-spacing:2px;color:rgba(0,229,255,0.1)}
 .ic{position:absolute;width:52px;height:52px;transform:translate(-50%,-50%);cursor:grab;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:50%;border:1px solid rgba(0,229,255,0.15);background:rgba(4,8,20,0.85);backdrop-filter:blur(4px);transition:border-color 0.1s, transform 0.1s;user-select:none;z-index:2;box-shadow: 0 4px 10px rgba(0,0,0,0.3)}
@@ -115,11 +115,15 @@ canvas#sbg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 .nr:active{background:rgba(0,229,255,0.08)}.nr.on{background:rgba(0,229,255,0.25)}
 .nrl{position:absolute;left:2px;top:50%;transform:translateY(-50%);font-size:6px;color:rgba(0,229,255,0.15);pointer-events:none}.nr.on .nrl{color:rgba(0,229,255,0.6);font-weight:bold}
 
+/* REAL-TIME NOTE FLASHING */
+.nr.fire-cell, .sc.rh.fire-cell { background: rgba(57,255,20,0.4) !important; border-color: var(--g) !important; box-shadow: 0 0 10px var(--g) !important; }
+.nr.fire-cell .nrl { color: #fff !important; }
+
 /* SPACER */
 .bspc{flex-shrink:0;height:16px}
 
 @media(max-width:700px){
-  .ic{width:42px;height:42px}.ic .s{font-size:14px}.stage{height:min(260px,35vh)}
+  .ic{width:42px;height:42px}.ic .s{font-size:14px}.stage{height:min(240px,32vh)}
   .stat .v{font-size:16px}.fxb .sl input[type=range]{width:60px}
   .cz{min-height: 60px;}
 }
@@ -130,7 +134,7 @@ canvas#sbg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 <div class="ui">
   <!-- TOP -->
   <div class="top">
-    <div class="brand m"><b>Conductive</b> v14</div>
+    <div class="brand m"><b>Conductive</b> v15</div>
     <div class="tmid">
       <button class="tb m" id="startB">▶ Start</button>
       <button class="tb m" id="pauseB" style="display:none">⏸</button>
@@ -168,15 +172,22 @@ canvas#sbg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
         <div class="sl"><label>Vol</label><input type="range" min="0" max="100" value="100" id="iVol" oninput="setIVol(this.value)"></div>
         <div class="sl"><label>Sus</label><input type="range" min="0" max="100" value="50" id="iSus" oninput="setISus(this.value)"></div>
       </div>
+      <!-- Piano Selector -->
       <div class="kmsel m" id="kmsel">
         <button class="tb" onclick="setKM('piano')">Piano</button>
         <button class="tb" onclick="setKM('organ')">Organ</button>
         <button class="tb" onclick="setKM('elec')">Elec</button>
         <button class="tb" onclick="setKM('class')">Classic</button>
       </div>
+      <!-- String Selector -->
+      <div class="kmsel m" id="smsel">
+        <button class="tb" onclick="setSM('legato')">Legato</button>
+        <button class="tb" onclick="setSM('staccato')">Staccato</button>
+        <button class="tb" onclick="setSM('pizz')">Pizzicato</button>
+      </div>
       <div class="pact m">
         <button onclick="clearPat()">Clear</button>
-        <button onclick="randPat()">Rand</button>
+        <button onclick="randPat()">Regenerate</button>
         <button onclick="cloneInst()">Clone</button>
         <button onclick="deselect()">✕</button>
       </div>
@@ -197,9 +208,6 @@ const TV = [1, 0.8, 0.65, 0.5]; // tier volume multipliers
 // ═══════════════════════════════════════════
 // INSTRUMENT DEFINITIONS
 // ═══════════════════════════════════════════
-// type: 'note' = triggerAttackRelease(note, dur, time, vel)
-//       'noise' = triggerAttackRelease(dur, time, vel)
-//       'poly' = triggerAttackRelease([notes], dur, time, vel)
 const DEFS = {
   kick:    {cat:'rhythm',  name:'Kick',    sym:'◉', tier:0, type:'note',  bus:'comp', defOn:true},
   snare:   {cat:'rhythm',  name:'Snare',   sym:'◎', tier:0, type:'noise', bus:'comp', defOn:true},
@@ -222,23 +230,23 @@ const DEFS = {
   texture: {cat:'atmo',    name:'Texture', sym:'░', tier:3, type:'note',  bus:'rev',  defOn:false},
 };
 
-// Auto-distribute angles per tier: -75° to +75°
+// Expand Stage Width: -80 to +80 spread
 (function autoSpace(){
   const tiers = {};
   Object.entries(DEFS).forEach(([id,d]) => { if(!tiers[d.tier]) tiers[d.tier]=[]; tiers[d.tier].push(id); });
   Object.values(tiers).forEach(ids => {
     const n = ids.length;
-    ids.forEach((id,i) => { DEFS[id].angle = n===1 ? 0 : -75 + (150/(n-1))*i; });
+    ids.forEach((id,i) => { DEFS[id].angle = n===1 ? 0 : -80 + (160/(n-1))*i; });
   });
 })();
 
 // ═══════════════════════════════════════════
-// SYNTH FACTORIES (Upgraded)
+// UPGRADED SYNTH FACTORIES
 // ═══════════════════════════════════════════
 const FACTORY = {
   kick:    () => new Tone.MembraneSynth({pitchDecay:0.05,octaves:5,volume:0,envelope:{attack:0.001,decay:0.3,sustain:0,release:0.15}}),
   snare:   () => new Tone.NoiseSynth({volume:-4,noise:{type:'white'},envelope:{attack:0.001,decay:0.15,sustain:0}}),
-  hihat:   () => new Tone.MetalSynth({volume:-14,frequency:200,envelope:{attack:0.001,decay:0.05,release:0.01},harmonicity:5.1,modulationIndex:32,resonance:4000,octaves:1.5}), // Upgraded HiHat
+  hihat:   () => new Tone.MetalSynth({volume:-14,frequency:200,envelope:{attack:0.001,decay:0.05,release:0.01},harmonicity:5.1,modulationIndex:32,resonance:4000,octaves:1.5}),
   clap:    () => new Tone.NoiseSynth({volume:-6,noise:{type:'pink'},envelope:{attack:0.003,decay:0.2,sustain:0}}), // Multi-triggered in play function
   perc:    () => new Tone.Synth({oscillator:{type:"triangle"},volume:-2,envelope:{attack:0.001,decay:0.06,sustain:0,release:0.01}}),
   subbass: () => new Tone.MonoSynth({oscillator:{type:"sine"},volume:0,envelope:{attack:0.01,decay:0.4,sustain:0.7,release:0.3},filterEnvelope:{attack:0.01,decay:0.1,sustain:0,release:0.3,baseFrequency:40,octaves:2}}),
@@ -247,27 +255,38 @@ const FACTORY = {
   pluck:   () => new Tone.Synth({oscillator:{type:"triangle"},volume:-4,envelope:{attack:0.001,decay:0.4,sustain:0,release:0.3}}),
   bell:    () => new Tone.Synth({oscillator:{type:"sine"},volume:-4,envelope:{attack:0.001,decay:1.5,sustain:0,release:1}}),
   arp:     () => new Tone.MonoSynth({oscillator:{type:"square"},volume:-6,envelope:{attack:0.01,decay:0.15,sustain:0.2,release:0.3},filterEnvelope:{attack:0.01,decay:0.15,sustain:0.1,release:0.3,baseFrequency:800,octaves:4}}),
-  hurdy:   () => new Tone.FMSynth({volume:-6,harmonicity:2.5,modulationIndex:5,oscillator:{type:"sawtooth"},modulation:{type:"square"},envelope:{attack:0.1,decay:0.2,sustain:0.7,release:0.4}}), // New Hurdy Gurdy
-  violin:  () => new Tone.MonoSynth({oscillator:{type:"sawtooth"},volume:-6,envelope:{attack:0.3,decay:0.3,sustain:0.8,release:0.5},filterEnvelope:{attack:0.2,decay:0.3,sustain:0.3,release:0.5,baseFrequency:600,octaves:3}}),
-  cello:   () => new Tone.MonoSynth({oscillator:{type:"sawtooth"},volume:-4,envelope:{attack:0.4,decay:0.3,sustain:0.8,release:0.6},filterEnvelope:{attack:0.3,decay:0.3,sustain:0.2,release:0.6,baseFrequency:200,octaves:3}}),
-  keys:    () => new Tone.PolySynth(Tone.Synth,{oscillator:{type:"triangle"},volume:-4,envelope:{attack:0.01,decay:0.3,sustain:0.5,release:0.4}}),
-  pad:     () => new Tone.PolySynth(Tone.Synth,{oscillator:{type:"fatsawtooth",count:3,spread:40},volume:-6,envelope:{attack:2,decay:1,sustain:0.8,release:3}}),
-  strings: () => new Tone.PolySynth(Tone.Synth,{oscillator:{type:"fatsawtooth",count:5,spread:20},volume:-6,envelope:{attack:1.2,decay:0.5,sustain:0.9,release:2}}),
+  hurdy:   () => new Tone.FMSynth({volume:-6,harmonicity:2.5,modulationIndex:5,oscillator:{type:"sawtooth"},modulation:{type:"square"},envelope:{attack:0.1,decay:0.2,sustain:0.7,release:0.4}}),
+  violin:  () => new Tone.FMSynth({volume:-6,harmonicity:3.01,modulationIndex:2,oscillator:{type:"sawtooth"},modulation:{type:"triangle"},envelope:{attack:0.3,decay:0.4,sustain:0.8,release:1.5}}),
+  cello:   () => new Tone.FMSynth({volume:-4,harmonicity:3.01,modulationIndex:3,oscillator:{type:"sawtooth"},modulation:{type:"triangle"},envelope:{attack:0.4,decay:0.4,sustain:0.8,release:1.5}}),
+  keys:    () => new Tone.PolySynth(Tone.Synth,{volume:-4,oscillator:{type:"triangle"},envelope:{attack:0.01,decay:0.3,sustain:0.5,release:0.4}}),
+  pad:     () => new Tone.PolySynth(Tone.Synth,{oscillator:{type:"fatsawtooth",count:3,spread:40},volume:-6,envelope:{attack:2.5,decay:1,sustain:0.8,release:3}}),
+  strings: () => new Tone.PolySynth(Tone.Synth,{oscillator:{type:"fatsawtooth",count:5,spread:20},volume:-6,envelope:{attack:1.5,decay:0.5,sustain:0.9,release:2.5}}),
   choir:   () => new Tone.PolySynth(Tone.Synth,{oscillator:{type:"fatsine",count:3,spread:15},volume:-4,envelope:{attack:1,decay:0.5,sustain:0.9,release:2}}),
   texture: () => new Tone.Synth({oscillator:{type:"fatsawtooth",count:2,spread:50},volume:-14,envelope:{attack:3,decay:2,sustain:0.4,release:4}}),
 };
 
-// Keys modes
+// Keys Modes (Classical uses triangle8 for a rich grand piano feel)
 const KM = {
   piano: {osc:"triangle",a:0.01,d:0.4,s:0.3,r:0.5},
-  organ: {osc:"sine",a:0.005,d:0.1,s:0.9,r:0.1},
+  organ: {osc:"sine4",a:0.05,d:0.1,s:0.9,r:0.1},
   elec:  {osc:"square",a:0.01,d:0.2,s:0.4,r:0.3},
-  class: {osc:"sawtooth",a:0.05,d:0.5,s:0.6,r:0.8},
+  class: {osc:"triangle8",a:0.005,d:1,s:0.2,r:2}, 
 };
 function setKM(m) {
   const k = KM[m]; if(!k || !synths.keys) return;
   synths.keys.set({oscillator:{type:k.osc},envelope:{attack:k.a,decay:k.d,sustain:k.s,release:k.r}});
   lg('Keys → '+m);
+}
+
+// String Modes
+const SM = {
+  legato:   {a:0.3, d:0.4, s:0.8, r:1.5, mIdx:2},
+  staccato: {a:0.02, d:0.2, s:0, r:0.1, mIdx:1},
+  pizz:     {a:0.005, d:0.1, s:0, r:0.05, mIdx:0}
+};
+function setSM(m) {
+  const k = SM[m]; if(!k || !selInst || !synths[selInst]) return;
+  try { synths[selInst].set({envelope:{attack:k.a,decay:k.d,sustain:k.s,release:k.r}, modulationIndex:k.mIdx}); lg('Strings → '+m); } catch(e) {}
 }
 
 // ═══════════════════════════════════════════
@@ -279,13 +298,12 @@ const E = {
   fc:3500, inst:{}
 };
 
-// Initialize per-instrument state
 Object.entries(DEFS).forEach(([id,d]) => {
   E.inst[id] = {
     on: d.defOn, angle: d.angle, tier: d.tier,
     pan: Math.sin(d.angle * Math.PI/180),
     vol: TV[d.tier], uVol: 1.0, sus: 0.5,
-    pat: Array.from({length:ST}, ()=>[]), usePat: false, patRoot: undefined,
+    pat: Array.from({length:ST}, ()=>[]), patRoot: undefined,
   };
 });
 
@@ -302,28 +320,55 @@ const KEYS_DATA = {
 let synths={}, panners={}, gains={}, fx={}, analyser=null;
 let booted=false, cStep=0, selInst=null, cloneCount=0;
 let gKey='', apiSt='', autoProg=true;
-// Locked to the specific preview model mandated by the environment
-const GM=['gemini-2.5-flash-preview-09-2025']; let gMi=0;
+
+// Explicitly lock to preview model to bypass API versioning issues
+const GM = "gemini-2.5-flash-preview-09-2025";
 
 // ═══════════════════════════════════════════
-// UNIVERSAL TRIGGER (with Clap Upgrade)
+// UNIVERSAL TRIGGER & VISUALIZER (Real-Time Notes)
 // ═══════════════════════════════════════════
-function trig(id, note, dur, time, vel) {
+function trig(id, note, dur, time, vel, stepIndex) {
   const s = synths[id]; if(!s) return;
   const def = DEFS[id]; if(!def) return;
+  
   try {
-    // Upgraded clap triggering: 3 rapid bursts for realism
+    // Audio triggering
     if (id.startsWith('clap')) {
         for(let i=0; i<3; i++) s.triggerAttackRelease("32n", time + i*0.015, vel*(1-i*0.2));
     }
     else if(def.type === 'noise') s.triggerAttackRelease(dur, time, vel);
     else if(def.type === 'poly') s.triggerAttackRelease(note, dur, time, vel);
     else s.triggerAttackRelease(note, dur, time, vel);
+    
+    flashInst(id);
+
+    // Visual Note Flashing in Pattern Grid
+    if (selInst === id && stepIndex !== undefined) {
+        Tone.Draw.schedule(() => {
+            const grid = document.getElementById('sg');
+            if(!grid || !grid.children[stepIndex]) return;
+            const col = grid.children[stepIndex];
+            
+            if(def.cat === 'rhythm') {
+                col.classList.add('fire-cell');
+            } else {
+                let noteArr = Array.isArray(note) ? note : [note];
+                noteArr.forEach(n => {
+                    const rows = col.querySelectorAll('.nr');
+                    rows.forEach(r => { if(r.innerText === n) r.classList.add('fire-cell'); });
+                });
+            }
+            setTimeout(() => {
+                col.classList.remove('fire-cell');
+                col.querySelectorAll('.fire-cell').forEach(r => r.classList.remove('fire-cell'));
+            }, 150);
+        }, time);
+    }
   } catch(e) { console.warn('trig', id, e.message); }
 }
 
 // ═══════════════════════════════════════════
-// TRANSPOSE HELPERS
+// TRANSPOSE HELPERS & SCALES
 // ═══════════════════════════════════════════
 const N2S={'C':0,'C#':1,'Db':1,'D':2,'D#':3,'Eb':3,'E':4,'F':5,'F#':6,'Gb':6,'G':7,'G#':8,'Ab':8,'A':9,'A#':10,'Bb':10,'B':11};
 const S2N=['C','C#','D','Eb','E','F','F#','G','Ab','A','Bb','B'];
@@ -331,9 +376,6 @@ function noteToMidi(ns){const m=ns.match(/^([A-G][b#]?)(\d)$/);if(!m)return 60;r
 function midiToNote(m){return S2N[m%12]+(Math.floor(m/12)-1)}
 function chordRoot(ch){return ch?.[0] ? (N2S[ch[0].replace(/\d/,'')] || 0) : 0}
 
-// ═══════════════════════════════════════════
-// SCALE
-// ═══════════════════════════════════════════
 function getScale(k,m){
   const s=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
   const f=['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B'];
@@ -341,47 +383,49 @@ function getScale(k,m){
   const ri = s.indexOf(k); if(ri<0) return s.slice(0,7);
   return iv.map(i => (m==='minor'?f:s)[(ri+i)%12]);
 }
+
 function patNotes(id){
   const sc=getScale(E.key,E.mode), d=DEFS[id];
   let lo=4,hi=5;
   if(d.cat==='bass'){lo=2;hi=3} else if(d.cat==='atmo'){lo=3;hi=4}
-  return[sc[4]+hi,sc[2]+hi,sc[0]+hi,sc[4]+lo,sc[2]+lo,sc[0]+lo];
+  // Generate 8 logical notes for the UI (High to Low)
+  return [sc[0]+(hi+1), sc[6]+hi, sc[5]+hi, sc[4]+hi, sc[3]+hi, sc[2]+hi, sc[1]+hi, sc[0]+hi];
 }
 
 // ═══════════════════════════════════════════
-// API
+// API (Exponential Backoff via standard URL)
 // ═══════════════════════════════════════════
 document.addEventListener('click',e=>{if(!document.querySelector('.apia')?.contains(e.target))document.getElementById('apiDD').classList.remove('open')});
 function setAP(s,err){apiSt=s;const el=document.getElementById('apiP'),lb=document.getElementById('apiL');el.className='apip m '+(s||'');lb.textContent={ok:'AI Sync',chk:'…',off:'Fallback','':'No Key'}[s]||'No Key';document.getElementById('apiE').textContent=err||''}
 
-function gURL(){return'https://generativelanguage.googleapis.com/v1beta/models/'+GM[gMi]+':generateContent?key='+gKey}
-async function gCall(p,retries){
-  const rd=[1000,2000,4000],mx=retries||rd.length;
-  for(let a=0;a<=mx;a++){
-    try{
-      const r=await fetch(gURL(),{
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({
-              contents:[{parts:[{text:p}]}],
-              generationConfig: { responseMimeType: "application/json" } // Ensured structured output
-          })
-      });
-      const d=await r.json();
-      if(r.ok&&d.candidates?.[0]?.content?.parts?.[0]?.text) return{ok:1,text:d.candidates[0].content.parts[0].text};
-      if(d.error&&a===mx) return{ok:0,error:d.error.message};
-    }catch(e){if(a===mx)return{ok:0,error:e.message}}
-    if(a<mx) await new Promise(r=>setTimeout(r,rd[Math.min(a,rd.length-1)]));
+async function gCall(p){
+  const URL = `https://generativelanguage.googleapis.com/v1beta/models/${GM}:generateContent?key=${gKey}`;
+  const payload = {
+      contents: [{parts: [{text: p}]}],
+      generationConfig: { responseMimeType: "application/json" }
+  };
+  
+  let delay = 1000;
+  for (let i = 0; i <= 3; i++) {
+      try {
+          const r = await fetch(URL, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
+          const d = await r.json();
+          if (r.ok && d.candidates?.[0]?.content?.parts?.[0]?.text) return {ok: 1, text: d.candidates[0].content.parts[0].text};
+          if (d.error && i === 3) return {ok: 0, error: d.error.message};
+      } catch(e) { if(i === 3) return {ok: 0, error: e.message}; }
+      await new Promise(res => setTimeout(res, delay));
+      delay *= 2;
   }
-  return{ok:0,error:'Retries exhausted'};
+  return {ok: 0, error: 'Timeout'};
 }
+
 async function connectAPI(){const k=document.getElementById('apiK').value.trim();if(!k)return;gKey=k;document.getElementById('apiK').value='';await testAPI()}
 async function testAPI(){
   if(!gKey){setAP('');return}
   setAP('chk');
-  const r=await gCall('{"status":"OK"}',1);
+  const r=await gCall('{"status":"OK"}');
   if(r.ok){setAP('ok');document.getElementById('apiDD').classList.remove('open');lg("AI Engine Synced.");return}
-  setAP('off', r.error || 'Check key');
+  setAP('off', r.error);
 }
 
 // ═══════════════════════════════════════════
@@ -410,10 +454,10 @@ function setISus(v){
 // ═══════════════════════════════════════════
 const stageEl=document.getElementById('stage'), sbg=document.getElementById('sbg'), sbgCtx=sbg.getContext('2d');
 
-function sGeo(){const r=stageEl.getBoundingClientRect();return{W:r.width,H:r.height,cx:r.width/2,cy:r.height+10,mr:44,ts:(r.height-5-44)/(TIERS-1)}}
+function sGeo(){const r=stageEl.getBoundingClientRect();return{W:r.width,H:r.height,cx:r.width/2,cy:r.height+20,mr:50,ts:(r.height-5-50)/(TIERS-1)}}
 function tierR(t){const g=sGeo();return g.mr+t*g.ts}
 function ang2xy(a,t){const g=sGeo(),r=tierR(t),rd=a*Math.PI/180;return{x:g.cx+Math.sin(rd)*r,y:g.cy-Math.cos(rd)*r}}
-function xy2ang(x,y){const g=sGeo(),dx=x-g.cx,dy=g.cy-y;return{a:Math.max(-80,Math.min(80,Math.atan2(dx,dy)*180/Math.PI)),t:Math.round(Math.max(0,Math.min(TIERS-1,(Math.sqrt(dx*dx+dy*dy)-g.mr)/g.ts)))}}
+function xy2ang(x,y){const g=sGeo(),dx=x-g.cx,dy=g.cy-y;return{a:Math.max(-85,Math.min(85,Math.atan2(dx,dy)*180/Math.PI)),t:Math.round(Math.max(0,Math.min(TIERS-1,(Math.sqrt(dx*dx+dy*dy)-g.mr)/g.ts)))}}
 
 function drawArcs(){const g=sGeo();sbg.width=g.W;sbg.height=g.H;const c=sbgCtx;c.clearRect(0,0,g.W,g.H);for(let t=0;t<TIERS;t++){const r=tierR(t);c.beginPath();c.arc(g.cx,g.cy,r,Math.PI+0.12,-0.12);c.strokeStyle='rgba(0,229,255,'+(0.02+(TIERS-1-t)*0.01)+')';c.lineWidth=1;c.stroke()}}
 
@@ -444,13 +488,7 @@ function buildStage(){
     };
     const oE=()=>{el.classList.remove('drag');if(!drag)tapInst(id)};
 
-    el.addEventListener('touchstart',e=>{e.stopPropagation();e.preventDefault();oS(e.touches[0].clientX,e.touches[0].clientY)},{passive:false});
-    el.addEventListener('touchmove',e=>{e.stopPropagation();e.preventDefault();oM(e.touches[0].clientX,e.touches[0].clientY)},{passive:false});
-    el.addEventListener('touchend',e=>{e.stopPropagation();oE()});
-    el.addEventListener('mousedown',e=>{e.stopPropagation();oS(e.clientX,e.clientY);
-      const mm=ev=>oM(ev.clientX,ev.clientY),mu=()=>{oE();window.removeEventListener('mousemove',mm);window.removeEventListener('mouseup',mu)};
-      window.addEventListener('mousemove',mm);window.addEventListener('mouseup',mu);
-    });
+    el.addEventListener('pointerdown',e=>{e.preventDefault();oS(e.clientX,e.clientY);const mm=ev=>oM(ev.clientX,ev.clientY),mu=()=>{oE();window.removeEventListener('pointermove',mm);window.removeEventListener('pointerup',mu)};window.addEventListener('pointermove',mm);window.addEventListener('pointerup',mu)});
     stageEl.appendChild(el);
   });
 }
@@ -469,7 +507,7 @@ function cloneInst(){
   const src=DEFS[selInst], st=E.inst[selInst]; cloneCount++;
   const nid=selInst+'_c'+cloneCount;
   DEFS[nid]={cat:src.cat,name:src.name+' '+cloneCount,sym:src.sym,tier:st.tier,angle:(st.angle||0)+8,type:src.type,bus:src.bus,defOn:true};
-  E.inst[nid]={on:true,angle:(st.angle||0)+8,tier:st.tier,pan:Math.sin(((st.angle||0)+8)*Math.PI/180),vol:TV[st.tier],uVol:st.uVol,sus:st.sus,pat:st.pat.map(p=>[...p]),usePat:st.usePat,patRoot:st.patRoot};
+  E.inst[nid]={on:true,angle:(st.angle||0)+8,tier:st.tier,pan:Math.sin(((st.angle||0)+8)*Math.PI/180),vol:TV[st.tier],uVol:st.uVol,sus:st.sus,pat:st.pat.map(p=>[...p]),patRoot:st.patRoot};
   const s=FACTORY[src.name.toLowerCase()]?FACTORY[src.name.toLowerCase()]():FACTORY[selInst.split('_')[0]]();
   const g=new Tone.Gain(E.inst[nid].vol*E.inst[nid].uVol), p=new Tone.Panner(E.inst[nid].pan);
   s.connect(g);g.connect(p);p.connect(fx[src.bus]||fx.comp);
@@ -478,7 +516,7 @@ function cloneInst(){
 }
 
 // ═══════════════════════════════════════════
-// PATTERN EDITOR
+// PATTERN ENGINE (All Playback is now Pattern Based)
 // ═══════════════════════════════════════════
 function openPat(id){
   const d=DEFS[id], st=E.inst[id]; if(!d||!st) return;
@@ -486,7 +524,11 @@ function openPat(id){
   document.getElementById('pw').classList.add('open');
   document.getElementById('iVol').value=Math.round(st.uVol*100);
   document.getElementById('iSus').value=Math.round(st.sus*100);
-  document.getElementById('kmsel').classList.toggle('show', id==='keys' || d.name?.startsWith('Keys'));
+  
+  const isKeys = id.startsWith('keys');
+  const isString = id.startsWith('violin') || id.startsWith('cello') || id.startsWith('hurdy');
+  document.getElementById('kmsel').classList.toggle('show', isKeys);
+  document.getElementById('smsel').classList.toggle('show', isString);
 
   const g=document.getElementById('sg'), isR=d.cat==='rhythm';
   g.innerHTML=''; g.className='sg '+(isR?'rh':'mel');
@@ -497,9 +539,8 @@ function openPat(id){
     if(isR){
       if(st.pat[s].length) cell.classList.add('on');
       cell.addEventListener('pointerdown', e=>{
-        e.preventDefault();e.stopPropagation();
+        e.preventDefault();
         st.pat[s]=st.pat[s].length?[]:['hit'];
-        st.usePat=st.pat.some(p=>p.length);
         cell.classList.toggle('on',st.pat[s].length>0);
       });
     } else {
@@ -508,12 +549,11 @@ function openPat(id){
         row.className='nr'+(st.pat[s].includes(ns)?' on':'');
         row.innerHTML='<span class="nrl">'+ns+'</span>';
         row.addEventListener('pointerdown', e=>{
-          e.preventDefault();e.stopPropagation();
+          e.preventDefault();
           const arr=st.pat[s], idx=arr.indexOf(ns);
           if(idx>=0) arr.splice(idx,1); else arr.push(ns);
           row.classList.toggle('on',arr.includes(ns));
-          st.usePat=st.pat.some(p=>p.length);
-          if(st.usePat && st.patRoot===undefined) st.patRoot=chordRoot(E.chords[E.ci]);
+          if(st.patRoot===undefined) st.patRoot=chordRoot(E.chords[E.ci]);
         });
         cell.appendChild(row);
       });
@@ -528,21 +568,50 @@ function upPlayhead(){
   for(let i=0;i<ST;i++){ if(cells[i]) cells[i].classList.toggle('ph',i===s16); }
 }
 
-function clearPat(){if(!selInst)return;E.inst[selInst].pat=Array.from({length:ST},()=>[]);E.inst[selInst].usePat=false;E.inst[selInst].patRoot=undefined;openPat(selInst)}
+function clearPat(){if(!selInst)return;E.inst[selInst].pat=Array.from({length:ST},()=>[]);E.inst[selInst].patRoot=undefined;openPat(selInst)}
 
-function randPat(){
-  if(!selInst) return;
-  const d=DEFS[selInst], st=E.inst[selInst], e=E.energy;
-  const notes=d.cat==='rhythm'?[]:patNotes(selInst);
-  for(let s=0;s<ST;s++){
-    st.pat[s]=[];
-    if(Math.random()<e*0.45){
-      if(d.cat==='rhythm') st.pat[s]=['hit'];
-      else { st.pat[s]=[notes[Math.floor(Math.random()*notes.length)]]; if(Math.random()<0.2){const n2=notes[Math.floor(Math.random()*notes.length)];if(!st.pat[s].includes(n2))st.pat[s].push(n2)} }
-    }
+// Generates an intelligent pattern based on instrument type
+function randPat(id = selInst){
+  if(!id) return;
+  const d=DEFS[id], st=E.inst[id], e=E.energy, base=id.split('_')[0];
+  const notes=d.cat==='rhythm'?[]:patNotes(id);
+  
+  st.pat = Array.from({length:ST}, ()=>[]);
+  st.patRoot = chordRoot(E.chords[E.ci]);
+
+  for(let s=0; s<ST; s++) {
+      let hit = false, nArr = [];
+      switch(base) {
+          case 'kick': if(s%8===0 || (s%8===3&&e>0.5&&Math.random()>0.3) || (s%8===6&&e>0.8&&Math.random()>0.3)) hit=true; break;
+          case 'snare': if(s%8===4 || (s%16===10&&e>0.5&&Math.random()>0.5)) hit=true; break;
+          case 'hihat': if(s%2===0 || (s%4===0&&e>0.4)) hit=true; break;
+          case 'clap': if(s%8===4) hit=true; break;
+          case 'perc': if(s%4===2 && Math.random()<e) hit=true; break;
+          case 'subbass':
+          case 'synbass':
+          case 'cello':
+              if(s%8===0) nArr = [notes[notes.length-1]]; // root note
+              break;
+          case 'lead':
+          case 'violin':
+          case 'hurdy':
+              if(Math.random()<e*0.6 && (s%4===0||s%4===2)) nArr = [notes[Math.floor(Math.random()*(notes.length/2))]]; // High notes
+              break;
+          case 'arp':
+          case 'pluck':
+              if(s%2===0 && Math.random()<e*0.8) nArr = [notes[Math.floor(Math.random()*notes.length)]];
+              break;
+          case 'bell':
+              if(s%8===0) nArr = [notes[0]];
+              break;
+          case 'keys':
+              if(s%4===0 || (s%8===6&&Math.random()<e)) nArr = [notes[notes.length-1], notes[notes.length-3], notes[notes.length-5]].filter(Boolean);
+              break;
+      }
+      if(d.cat==='rhythm' && hit) st.pat[s] = ['hit'];
+      else if(nArr.length) st.pat[s] = nArr;
   }
-  st.usePat=true; st.patRoot=chordRoot(E.chords[E.ci]);
-  openPat(selInst);
+  if(selInst === id) openPat(id);
 }
 
 // ═══════════════════════════════════════════
@@ -557,7 +626,13 @@ function renderChords(){
     const d=document.createElement('div');
     d.className='pc m'+(i===E.ci?' act':'')+(autoProg?'':i===E.ci?'':' dim');
     d.innerHTML='<span class="pci">'+(i+1)+'</span>'+chordName(ch);
-    d.addEventListener('pointerdown',e=>{e.stopPropagation();editChord(i,d)});
+    // Clicking a chord immediately switches to it
+    d.addEventListener('pointerdown',e=>{
+        e.stopPropagation(); 
+        E.ci = i; 
+        if(!autoProg) upChordHL(); 
+        editChord(i,d);
+    });
     el.appendChild(d);
   });
 }
@@ -568,7 +643,7 @@ function editChord(idx,anch){
   anch.style.position='relative';anch.appendChild(dr);
   setTimeout(()=>{const cl=e=>{if(!dr.contains(e.target)){dr.remove();document.removeEventListener('pointerdown',cl)}};document.addEventListener('pointerdown',cl)},50);
 }
-function upChordHL(){const cells=document.getElementById('pcs')?.children;if(!cells)return;for(let i=0;i<cells.length;i++)cells[i].classList.toggle('act',i===E.ci)}
+function upChordHL(){const cells=document.getElementById('pcs')?.children;if(!cells)return;for(let i=0;i<cells.length;i++)cells[i].className='pc m'+(i===E.ci?' act':'')+(autoProg?'':i===E.ci?'':' dim');}
 function randProg(){const av=availChords();E.chords=Array.from({length:4},()=>av[Math.floor(Math.random()*av.length)].notes);renderChords()}
 renderChords();
 
@@ -586,7 +661,7 @@ async function boot(){
   document.getElementById('conduct-hint').style.opacity='1';
   setTimeout(()=>document.getElementById('conduct-hint').style.opacity='0',4000);
 
-  // Effects chain (Enhanced Chorus for Pads)
+  // Effects chain
   fx.master = new Tone.Gain(0.9).toDestination();
   fx.rev = new Tone.Reverb({decay:4,wet:0.12}).connect(fx.master); await fx.rev.ready;
   fx.filt = new Tone.Filter(E.fc,"lowpass").connect(fx.rev);
@@ -596,51 +671,54 @@ async function boot(){
   fx.wide = new Tone.StereoWidener(0.6).connect(fx.rev);
   analyser = new Tone.Analyser('waveform',256); fx.master.connect(analyser);
 
-  // Wire all instruments
+  // Initialize and populate patterns for default instruments
   Object.entries(DEFS).forEach(([id,d]) => {
     const st=E.inst[id], bus=d.bus||'comp';
     const s=FACTORY[id](), g=new Tone.Gain(st.vol*st.uVol), p=new Tone.Panner(st.pan);
     s.connect(g); g.connect(p); p.connect(fx[bus]||fx.comp);
     synths[id]=s; gains[id]=g; panners[id]=p;
+    if(st.on && d.cat !== 'atmo') randPat(id); // Auto-populate patterns on boot
   });
-  console.log("Wired:",Object.keys(synths).join(', '));
-
-  // Boot test
-  setTimeout(()=>{try{synths.kick.triggerAttackRelease("C1","8n",undefined,0.5);}catch(e){}},300);
 
   // Sequencer
-  let arpS=0;
   new Tone.Loop(time => {
     const e=E.energy, s16=cStep%ST;
 
-    // Chord change every 16 steps
+    // Chord change
     if(cStep%ST===0 && autoProg) E.ci=(E.ci+1)%E.chords.length;
     const ch=E.chords[E.ci];
 
-    // Atmosphere (generative only)
+    // Atmosphere (Generative only - no pattern grids for pads)
     if(cStep%ST===0){
-      ['pad','strings'].forEach(id=>{const st=E.inst[id];if(st?.on&&!st.usePat)trig(id,ch,"1m",time,e*0.6+0.3)});
-      if(E.inst.choir?.on&&!E.inst.choir.usePat) trig('choir',ch.map(n=>n.replace(/\d/,'4')),"1m",time,e*0.5+0.3);
-      if(E.inst.texture?.on&&!E.inst.texture.usePat) trig('texture',ch[0].replace(/\d/,'2'),"1m",time,e*0.3+0.2);
+      ['pad','strings'].forEach(id=>{const st=E.inst[id];if(st?.on)trig(id,ch,"1m",time,e*0.6+0.3)});
+      if(E.inst.choir?.on) trig('choir',ch.map(n=>n.replace(/\d/,'4')),"1m",time,e*0.5+0.3);
+      if(E.inst.texture?.on) trig('texture',ch[0].replace(/\d/,'2'),"1m",time,e*0.3+0.2);
     }
 
-    // All instruments
+    // Play Patterns
     Object.entries(E.inst).forEach(([id,st]) => {
       if(!st.on) return;
-      const d=DEFS[id]; if(!d) return;
-      if(d.cat==='atmo' && !st.usePat) return;
-
-      if(st.usePat && st.pat.some(p=>p.length)){
-        // PATTERN MODE
-        const v=st.pat[s16]; if(!v.length) return;
-        playPatStep(id, d, ch, v, time, e);
-      } else if(d.cat!=='atmo'){
-        // GENERATIVE MODE
-        genPlay(id, d, ch, s16, time, e, arpS);
+      const d=DEFS[id]; if(!d || d.cat==='atmo') return;
+      const vals=st.pat[s16]; if(!vals.length) return;
+      
+      const shift = st.patRoot!==undefined ? (chordRoot(ch)-st.patRoot+12)%12 : 0;
+      const dur = d.cat==='bass'?'4n' : '8n';
+      
+      if(d.cat==='rhythm'){
+          trig(id, null, dur, time, e*0.7+0.3, s16);
+      } else {
+          if(d.type==='poly'){
+            const notes = vals.map(ns => shift===0 ? ns : midiToNote(noteToMidi(ns)+shift));
+            trig(id, notes, dur, time, e*0.5+0.3, s16);
+          } else {
+            vals.forEach(ns => {
+              const note = shift===0 ? ns : midiToNote(noteToMidi(ns)+shift);
+              trig(id, note, dur, time, e*0.5+0.3, s16);
+            });
+          }
       }
     });
 
-    if(E.inst.arp?.on) arpS++;
     cStep++;
     Tone.Draw.schedule(()=>{upPlayhead();upChordHL()},time);
   },"16n").start(0);
@@ -649,58 +727,7 @@ async function boot(){
   Tone.Transport.start();
   buildStage();
   requestAnimationFrame(renderViz);
-  lg("Live. Drag finger to conduct");
-}
-
-// ═══════════════════════════════════════════
-// PATTERN STEP PLAYBACK
-// ═══════════════════════════════════════════
-function playPatStep(id, d, ch, vals, time, e) {
-  if(d.cat==='rhythm'){
-    if(id.startsWith('kick')) trig(id,"C1","8n",time,e*0.7+0.3);
-    else if(id.startsWith('hihat')) trig(id,"C8","32n",time,e*0.6+0.3);
-    else if(id.startsWith('perc')) trig(id,"G6","16n",time,e*0.6+0.3);
-    else trig(id, null, "16n", time, e*0.6+0.3); // snare/clap
-  } else {
-    const st=E.inst[id];
-    const shift = st.patRoot!==undefined ? (chordRoot(ch)-st.patRoot+12)%12 : 0;
-    const dur = d.cat==='bass'?'4n' : d.cat==='atmo'?'2n' : '8n';
-    if(d.type==='poly'){
-      const notes = vals.map(ns => { if(shift===0)return ns; return midiToNote(noteToMidi(ns)+shift); });
-      trig(id, notes, dur, time, e*0.5+0.3);
-    } else {
-      vals.forEach(ns => {
-        const note = shift===0 ? ns : midiToNote(noteToMidi(ns)+shift);
-        trig(id, note, dur, time, e*0.5+0.3);
-      });
-    }
-  }
-  flashInst(id);
-}
-
-// ═══════════════════════════════════════════
-// GENERATIVE PLAYBACK
-// ═══════════════════════════════════════════
-function genPlay(id, d, ch, s, t, e, arpS) {
-  const V = e*0.5+0.3;
-  const base = id.split('_')[0]; // handle clones
-  switch(base){
-    case'kick':    if(s%8===0||(s%8===3&&e>0.6)||(s%8===6&&e>0.8)){trig(id,"C1","8n",t,Math.min(V*1.2, 1));flashInst(id)}break;
-    case'snare':   if(s%8===4||(s%16===10&&e>0.5)){trig(id,null,"16n",t,V);flashInst(id)}break;
-    case'hihat':   if(e>0.1&&(s%4===0||(s%2===0&&e>0.4))){trig(id,"C8","32n",t,V);flashInst(id)}break;
-    case'clap':    if(s%8===4){trig(id,null,"16n",t,V);flashInst(id)}break;
-    case'perc':    if(s%4===2){trig(id,"G6","16n",t,V);flashInst(id)}break;
-    case'subbass': if(s%8===0){trig(id,ch[0].replace(/\d/,'1'),"4n",t,V);flashInst(id)}break;
-    case'synbass': if(s%8===0){trig(id,ch[0].replace(/\d/,'2'),"4n",t,V);flashInst(id)}break;
-    case'lead':    if(Math.random()<e*0.55&&(s%4===0||(s%4===2&&Math.random()<0.4))){trig(id,ch[Math.floor(Math.random()*3)].replace(/[23]/,Math.random()>0.5?'5':'4'),"8n",t,V);flashInst(id)}break;
-    case'pluck':   if(s%8===0){trig(id,ch[Math.floor(Math.random()*3)].replace(/[23]/,'4'),"8n",t,V);flashInst(id)}break;
-    case'bell':    if(s%8===0){trig(id,ch[Math.floor(Math.random()*3)].replace(/[23]/,'5'),"4n",t,V*0.7);flashInst(id)}break;
-    case'arp':     if(s%2===0){const ns=[...ch.map(n=>n.replace(/[23]/,'4')),...ch.map(n=>n.replace(/[23]/,'5'))];trig(id,ns[arpS%ns.length],"16n",t,V);flashInst(id)}break;
-    case'hurdy':   if(s%4===0||(s%4===2&&Math.random()<0.3)){trig(id,ch[Math.floor(Math.random()*3)].replace(/[23]/,'4'),"8n",t,V);flashInst(id)}break;
-    case'violin':  if(Math.random()<e*0.4&&s%4===0){trig(id,ch[Math.floor(Math.random()*3)].replace(/[23]/,'5'),"4n",t,V);flashInst(id)}break;
-    case'cello':   if(s%8===0){trig(id,ch[0].replace(/\d/,'3'),"4n",t,V);flashInst(id)}break;
-    case'keys':    if(s%4===0){trig(id,[ch[0].replace(/\d/,'4'),ch[1]?.replace(/\d/,'4'),ch[2]?.replace(/\d/,'4')].filter(Boolean),"4n",t,V*0.8);flashInst(id)}break;
-  }
+  lg("Live. Drag finger to conduct.");
 }
 
 // ═══════════════════════════════════════════
@@ -714,52 +741,31 @@ document.getElementById('pauseB').addEventListener('click',()=>{
 });
 
 // ═══════════════════════════════════════════
-// CONDUCTING — spatial volume + 2-finger tempo
+// CONDUCTING
 // ═══════════════════════════════════════════
-const trail=[]; let conducting=false, twoFinger=false, tfStartY=0, tfStartTempo=0;
+const trail=[]; let conducting=false;
 const czEl=document.getElementById('cz');
 
-czEl.addEventListener('touchstart',e=>{
-  e.preventDefault(); document.getElementById('conduct-hint').style.opacity='0';
-  if(e.touches.length>=2){twoFinger=true;tfStartY=(e.touches[0].clientY+e.touches[1].clientY)/2;tfStartTempo=E.tempo;return}
-  conducting=true; doConduct(e.touches[0].clientX, e.touches[0].clientY);
-},{passive:false});
-czEl.addEventListener('touchmove',e=>{
-  e.preventDefault();
-  if(twoFinger&&e.touches.length>=2){const y=(e.touches[0].clientY+e.touches[1].clientY)/2;E.tempo=Math.max(40,Math.min(200,Math.round(tfStartTempo+(tfStartY-y)*0.5)));if(booted)Tone.Transport.bpm.rampTo(E.tempo,0.1);upUI();return}
-  if(conducting) doConduct(e.touches[0].clientX, e.touches[0].clientY);
-},{passive:false});
-czEl.addEventListener('touchend',conductEnd);czEl.addEventListener('touchcancel',conductEnd);
-czEl.addEventListener('mousedown',e=>{conducting=true; document.getElementById('conduct-hint').style.opacity='0'; doConduct(e.clientX,e.clientY)});
-czEl.addEventListener('mousemove',e=>{if(conducting)doConduct(e.clientX,e.clientY)});
-czEl.addEventListener('mouseup',conductEnd);czEl.addEventListener('mouseleave',conductEnd);
-
-function doConduct(x,y){
-  if(!booted) return;
-  const rect = czEl.getBoundingClientRect();
-  // Calculate relative to the CZ box so it feels mapped
-  E.energy=Math.max(0,Math.min(1, 1 - (y-rect.top)/rect.height));
-  const nx=Math.max(0,Math.min(1, (x-rect.left)/rect.width)); 
-  const pointerAngle=(nx-0.5)*160;
-  
-  Object.entries(E.inst).forEach(([id,st])=>{
-    if(!gains[id]) return;
-    const prox=Math.max(0,1-Math.abs(st.angle-pointerAngle)/80);
-    gains[id].gain.rampTo(st.vol*st.uVol*(1+prox*0.6),0.12);
-  });
-  E.fc=200+nx*7000;
-  if(fx.filt) fx.filt.frequency.rampTo(E.fc,0.08);
-  upUI();
-  trail.push({x,y,t:performance.now()});if(trail.length>80)trail.shift();
-}
-
-function conductEnd(){
-  conducting=false; twoFinger=false;
-  if(booted) Object.entries(E.inst).forEach(([id,st])=>{if(gains[id])gains[id].gain.rampTo(st.vol*st.uVol,0.3)});
-}
+czEl.addEventListener('pointerdown',e=>{
+  if(!booted)return; conducting=true; document.getElementById('conduct-hint').style.opacity='0';
+  const rect=czEl.getBoundingClientRect();
+  const hMove=(ev)=>{
+    E.energy=Math.max(0,Math.min(1,1-(ev.clientY-rect.top)/rect.height));
+    const nx=Math.max(0,Math.min(1,(ev.clientX-rect.left)/rect.width)), pAngle=(nx-0.5)*160;
+    Object.entries(E.inst).forEach(([id,st])=>{
+      if(!gains[id]) return;
+      const prox=Math.max(0,1-Math.abs(st.angle-pAngle)/80);
+      gains[id].gain.rampTo(st.vol*st.uVol*(1+prox*0.6),0.12);
+    });
+    E.fc=200+nx*7000; if(fx.filt) fx.filt.frequency.rampTo(E.fc,0.08);
+    upUI(); trail.push({x:ev.clientX,y:ev.clientY,t:performance.now()}); if(trail.length>80)trail.shift();
+  };
+  const hUp=()=>{conducting=false;window.removeEventListener('pointermove',hMove);window.removeEventListener('pointerup',hUp); Object.entries(E.inst).forEach(([id,st])=>{if(gains[id])gains[id].gain.rampTo(st.vol*st.uVol,0.3)});};
+  window.addEventListener('pointermove',hMove);window.addEventListener('pointerup',hUp);
+});
 
 // ═══════════════════════════════════════════
-// AI
+// AI INTERPRETATION
 // ═══════════════════════════════════════════
 async function interpret(input){
   if(!input?.trim()) return; lg('…');
@@ -767,59 +773,52 @@ async function interpret(input){
   setAP('chk');
   const il=Object.entries(DEFS).map(([k,v])=>k+'('+v.name+')').join(', ');
   const al=Object.entries(E.inst).filter(([k,v])=>v.on).map(([k])=>k).join(',');
-  const sc=getScale(E.key,E.mode);
-  const prompt=`You control a live music engine. Return ONLY JSON. No markdown.
-Instruments: ${il}
-Keys: C-B. Modes: minor, major. Scale: ${sc.join(',')}
-You can activate instruments AND program 16-step patterns.
-
-Format: {"tempo":40-200,"energy":0-1,"key":"X","mode":"minor|major","filterCutoff":100-8000,
-"instruments":{"name":bool},
-"patterns":{"name":["C4",null,"E4",null,null,null,null,null,null,null,null,null,null,null,null,null]}}
-
-Pattern: 16 slots. Rhythm uses "hit"/null. Melodic uses note strings or null.
-
-State: tempo=${E.tempo},energy=${E.energy},key=${E.key} ${E.mode},active=[${al}]
-Command: "${input}"`;
-  const r=await gCall(prompt,2);
-  if(r.ok){try{applyAI(JSON.parse(r.text));setAP('ok')}catch(e){setAP('ok');fallback(input)}}
-  else{setAP('ok');fallback(input)}
-}
-
-function applyAI(j){
-  if(j.tempo) E.tempo=Math.max(40,Math.min(200,j.tempo));
-  if(j.energy!==undefined) E.energy=Math.max(0,Math.min(1,j.energy));
-  if(j.filterCutoff) E.fc=Math.max(100,Math.min(8000,j.filterCutoff));
-  if(j.key&&KEYS_DATA[j.key]) E.key=j.key;
-  if(j.mode==='major'||j.mode==='minor') E.mode=j.mode;
-  if(j.instruments) Object.entries(j.instruments).forEach(([k,v])=>{if(E.inst[k])E.inst[k].on=!!v});
-  if(j.patterns) Object.entries(j.patterns).forEach(([id,pat])=>{
-    if(!E.inst[id]||!Array.isArray(pat)) return;
-    E.inst[id].pat=pat.map(v=>v?[v]:[]);
-    E.inst[id].usePat=E.inst[id].pat.some(p=>p.length);
-    if(E.inst[id].usePat) E.inst[id].patRoot=chordRoot(E.chords[E.ci]);
-  });
-  if(KEYS_DATA[E.key]?.[E.mode]) E.chords=KEYS_DATA[E.key][E.mode];
-  if(booted){Tone.Transport.bpm.rampTo(E.tempo,2);fx.filt.frequency.rampTo(E.fc,1)}
-  buildStage();upUI();renderChords();
-  if(selInst&&(j.patterns?.[selInst]||j.instruments?.[selInst]!==undefined)) openPat(selInst);
-  lg('AI → '+E.tempo+'bpm '+E.key+(E.mode==='minor'?'m':''));
+  const prompt=`You control a music engine. Output strict JSON. Format:
+{"tempo":40-200,"energy":0-1,"key":"C","mode":"minor|major","filterCutoff":100-8000,"instruments":{"name":bool}}
+Instruments: ${il}. State: tempo=${E.tempo},energy=${E.energy},key=${E.key} ${E.mode},active=[${al}]. Command: "${input}"`;
+  
+  const r=await gCall(prompt, 1);
+  if(r.ok){
+      try{
+          const j = JSON.parse(r.text);
+          if(j.tempo) E.tempo=Math.max(40,Math.min(200,j.tempo));
+          if(j.energy!==undefined) E.energy=Math.max(0,Math.min(1,j.energy));
+          if(j.filterCutoff) E.fc=Math.max(100,Math.min(8000,j.filterCutoff));
+          if(j.key&&KEYS_DATA[j.key]) E.key=j.key;
+          if(j.mode==='major'||j.mode==='minor') E.mode=j.mode;
+          if(j.instruments) {
+              Object.entries(j.instruments).forEach(([k,v])=>{
+                  if(E.inst[k]) {
+                      const turnedOn = v && !E.inst[k].on;
+                      E.inst[k].on = !!v;
+                      // Auto-populate pattern if AI turns it on
+                      if(turnedOn && DEFS[k].cat !== 'atmo') randPat(k);
+                  }
+              });
+          }
+          if(KEYS_DATA[E.key]?.[E.mode]) E.chords=KEYS_DATA[E.key][E.mode];
+          if(booted){Tone.Transport.bpm.rampTo(E.tempo,2);fx.filt.frequency.rampTo(E.fc,1)}
+          buildStage();upUI();renderChords();
+          if(selInst) openPat(selInst);
+          setAP('ok'); lg('AI → '+E.tempo+'bpm '+E.key+(E.mode==='minor'?'m':''));
+      } catch(e){ setAP('ok'); fallback(input); }
+  } else { setAP('ok'); fallback(input); }
 }
 
 function fallback(cmd){
-  const t=(typeof cmd==='string'?cmd:'').toLowerCase();
+  const t=cmd.toLowerCase();
   if(t.match(/chill|calm|slow|soft/)){E.tempo=78;E.energy=0.25}
-  else if(t.match(/hype|dance|party|fast|drop/)){E.tempo=130;E.energy=0.9;E.inst.clap.on=true;E.inst.arp.on=true}
-  else if(t.match(/dark|heavy|intense/)){E.tempo=95;E.energy=0.75;E.mode='minor';E.inst.subbass.on=true}
-  else if(t.match(/cinematic|epic|film/)){E.tempo=85;E.energy=0.6;E.inst.strings.on=true;E.inst.pad.on=true;E.inst.violin.on=true;E.inst.cello.on=true}
-  else if(t.match(/ambient|space|dream/)){E.tempo=70;E.energy=0.3;E.inst.pad.on=true;E.inst.texture.on=true;E.inst.bell.on=true}
+  else if(t.match(/hype|dance|party|fast|drop/)){E.tempo=130;E.energy=0.9;E.inst.clap.on=true;E.inst.arp.on=true; randPat('clap'); randPat('arp');}
+  else if(t.match(/dark|heavy|intense/)){E.tempo=95;E.energy=0.75;E.mode='minor';E.inst.subbass.on=true; randPat('subbass');}
+  else if(t.match(/cinematic|epic|film/)){E.tempo=85;E.energy=0.6;E.inst.strings.on=true;E.inst.pad.on=true;E.inst.violin.on=true;E.inst.cello.on=true; randPat('violin'); randPat('cello');}
+  else if(t.match(/ambient|space|dream/)){E.tempo=70;E.energy=0.3;E.inst.pad.on=true;E.inst.texture.on=true;E.inst.bell.on=true; randPat('bell');}
   if(KEYS_DATA[E.key]?.[E.mode]) E.chords=KEYS_DATA[E.key][E.mode];
   if(booted) Tone.Transport.bpm.rampTo(E.tempo,2);
   buildStage();upUI();renderChords();lg('→ '+E.tempo+'bpm');
 }
 
 // ═══════════════════════════════════════════
-// VOICE
+// UI & EVENTS
 // ═══════════════════════════════════════════
 document.getElementById('voiceB').addEventListener('click',()=>{
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
@@ -832,14 +831,9 @@ document.getElementById('voiceB').addEventListener('click',()=>{
   rec.onend=()=>{btn.classList.remove('rec');btn.textContent='🎤 Speak'};
   try{rec.start()}catch(e){lg("Mic fail")}
 });
-
-// TEXT
 document.getElementById('cmdGo').addEventListener('click',()=>{const i=document.getElementById('cmdIn');if(i.value.trim()){interpret(i.value.trim());i.value=''}});
 document.getElementById('cmdIn').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('cmdGo').click()});
 
-// ═══════════════════════════════════════════
-// VISUALS
-// ═══════════════════════════════════════════
 const vc=document.getElementById('viz'), vx=vc.getContext('2d');
 const particles=[];
 class Particle{
@@ -851,174 +845,88 @@ function renderViz(){
   const W=vc.width=window.innerWidth, H=vc.height=window.innerHeight;
   const t=performance.now()*0.001, e=E.energy, now=performance.now();
   vx.clearRect(0,0,W,H);
-
-  // BG glow
   const g=vx.createRadialGradient(W/2,H*0.18,0,W/2,H*0.18,W*0.3);
   g.addColorStop(0,'rgba(0,'+(18+e*30|0)+','+(30+e*45|0)+','+(0.015+e*0.02)+')');
   g.addColorStop(1,'transparent');
   vx.fillStyle=g;vx.fillRect(0,0,W,H);
 
-  // Pulse
   const cx=W/2,cy=H*0.18,bR=20+e*40;
   vx.beginPath();
   for(let a=0;a<Math.PI*2;a+=0.06){const n=Math.sin(a*6+t*3)*6*e+Math.sin(a*3-t*2)*3*e;a===0?vx.moveTo(cx+Math.cos(a)*(bR+n),cy+Math.sin(a)*(bR+n)):vx.lineTo(cx+Math.cos(a)*(bR+n),cy+Math.sin(a)*(bR+n))}
   vx.closePath();vx.strokeStyle='rgba(0,229,255,'+(0.02+e*0.08)+')';vx.lineWidth=1;vx.stroke();
 
-  // Trail
   if(trail.length>1){
     vx.beginPath();let started=false;
     trail.forEach(p=>{if((now-p.t)/2000>1)return;if(!started){vx.moveTo(p.x,p.y);started=true}else vx.lineTo(p.x,p.y)});
     vx.strokeStyle='rgba(0,229,255,0.4)';vx.lineWidth=2;vx.stroke();
   }
   while(trail.length&&now-trail[0].t>2000) trail.shift();
-
-  // Particles
   if(Math.random()<e*0.1){const a=Math.random()*Math.PI*2;particles.push(new Particle(cx+Math.cos(a)*bR,cy+Math.sin(a)*bR))}
   for(let i=particles.length-1;i>=0;i--){const p=particles[i];p.update();if(p.life<=0){particles.splice(i,1);continue}vx.beginPath();vx.arc(p.x,p.y,p.sz*p.life,0,Math.PI*2);vx.fillStyle='rgba('+p.c+','+p.life*0.15+')';vx.fill()}
   if(particles.length>80) particles.splice(0,particles.length-80);
-
   requestAnimationFrame(renderViz);
 }
 
-function upUI(){
-  document.getElementById('vB').textContent=Math.round(E.tempo);
-  document.getElementById('vE').textContent=Math.round(E.energy*100);
-  document.getElementById('vK').textContent=E.key+(E.mode==='minor'?'m':'');
-}
+function upUI(){document.getElementById('vB').textContent=Math.round(E.tempo);document.getElementById('vE').textContent=Math.round(E.energy*100);document.getElementById('vK').textContent=E.key+(E.mode==='minor'?'m':'')}
 function lg(m){document.getElementById('log').textContent='> '+m}
 
 // ═══════════════════════════════════════════
 // SONG SAVE / LOAD
 // ═══════════════════════════════════════════
 function saveSong(){
-  const song = {
-    version: 14,
-    name: prompt('Song name:', 'Untitled') || 'Untitled',
-    timestamp: new Date().toISOString(),
-    tempo: E.tempo,
-    energy: E.energy,
-    key: E.key,
-    mode: E.mode,
-    chords: E.chords,
-    filterCutoff: E.fc,
-    autoProg: autoProg,
-    instruments: {}
-  };
-  // Save each instrument's full state
+  const song={version:15,name:prompt('Song name:','Untitled')||'Untitled',timestamp:new Date().toISOString(),tempo:E.tempo,energy:E.energy,key:E.key,mode:E.mode,chords:E.chords,filterCutoff:E.fc,autoProg:autoProg,instruments:{}};
   Object.entries(E.inst).forEach(([id, st]) => {
-    const d = DEFS[id];
-    song.instruments[id] = {
-      on: st.on,
-      angle: st.angle,
-      tier: st.tier,
-      uVol: st.uVol,
-      sus: st.sus,
-      pat: st.pat,
-      usePat: st.usePat,
-      patRoot: st.patRoot,
-      // Include def info for cloned instruments
-      isClone: !FACTORY[id],
-      cloneBase: d?.name?.split(' ')[0]?.toLowerCase(),
-    };
+    song.instruments[id] = {on:st.on,angle:st.angle,tier:st.tier,uVol:st.uVol,sus:st.sus,pat:st.pat,patRoot:st.patRoot,isClone:!FACTORY[id],cloneBase:DEFS[id]?.name?.split(' ')[0]?.toLowerCase()};
   });
-
-  // Download as JSON
-  const blob = new Blob([JSON.stringify(song, null, 2)], {type:'application/json'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = song.name.replace(/[^a-zA-Z0-9_-]/g,'_') + '.json';
-  a.click();
-  URL.revokeObjectURL(url);
-  lg('Saved: ' + song.name);
+  const blob=new Blob([JSON.stringify(song,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob), a=document.createElement('a');
+  a.href=url; a.download=song.name.replace(/[^a-zA-Z0-9_-]/g,'_')+'.json'; a.click();
+  URL.revokeObjectURL(url); lg('Saved: '+song.name);
 }
 
 function loadSong(input){
-  const file = input.files[0];
-  if(!file) return;
-  const reader = new FileReader();
-  reader.onload = (ev) => {
-    try {
-      const song = JSON.parse(ev.target.result);
-      applySong(song);
-      lg('Loaded: ' + (song.name || 'song'));
-    } catch(e) {
-      lg('Bad file: ' + e.message);
-    }
-  };
-  reader.readAsText(file);
-  input.value = ''; // reset so same file can be loaded again
+  const file=input.files[0]; if(!file)return;
+  const reader=new FileReader();
+  reader.onload=(ev)=>{try{applySong(JSON.parse(ev.target.result));lg('Loaded')}catch(e){lg('Bad file')}};
+  reader.readAsText(file); input.value='';
 }
 
 function applySong(song){
-  // Core state
-  E.tempo = song.tempo || 110;
-  E.energy = song.energy || 0.5;
-  E.key = song.key || 'C';
-  E.mode = song.mode || 'minor';
-  E.fc = song.filterCutoff || 3500;
-  if(song.chords) E.chords = song.chords;
-  if(song.autoProg !== undefined) { autoProg = song.autoProg; document.getElementById('psw').classList.toggle('on', autoProg); }
-
-  // Update chords from key if not provided
-  if(!song.chords && KEYS_DATA[E.key]?.[E.mode]) E.chords = KEYS_DATA[E.key][E.mode];
-
-  // Instruments
+  E.tempo=song.tempo||110; E.energy=song.energy||0.5; E.key=song.key||'C'; E.mode=song.mode||'minor'; E.fc=song.filterCutoff||3500;
+  if(song.chords) E.chords=song.chords; else if(KEYS_DATA[E.key]?.[E.mode]) E.chords=KEYS_DATA[E.key][E.mode];
+  if(song.autoProg!==undefined) { autoProg=song.autoProg; document.getElementById('psw').classList.toggle('on',autoProg); }
   if(song.instruments){
     Object.entries(song.instruments).forEach(([id, saved]) => {
       if(!E.inst[id]) {
-        // This might be a cloned instrument — recreate it
-        if(saved.isClone && saved.cloneBase && FACTORY[saved.cloneBase]){
-          const base = saved.cloneBase;
-          const srcDef = Object.entries(DEFS).find(([k,v])=>k===base)?.[1];
+        if(saved.isClone&&saved.cloneBase&&FACTORY[saved.cloneBase]){
+          const base=saved.cloneBase, srcDef=Object.entries(DEFS).find(([k,v])=>k===base)?.[1];
           if(srcDef){
-            DEFS[id] = {cat:srcDef.cat, name:id, sym:srcDef.sym, tier:saved.tier||srcDef.tier, angle:saved.angle||0, type:srcDef.type, bus:srcDef.bus, defOn:true};
-            E.inst[id] = {on:true,angle:0,tier:0,pan:0,vol:1,uVol:1,sus:0.5,pat:Array.from({length:ST},()=>[]),usePat:false,patRoot:undefined};
-            // Wire synth if booted
-            if(booted && FACTORY[base]){
-              const s=FACTORY[base](), g=new Tone.Gain(1), p=new Tone.Panner(0);
-              s.connect(g);g.connect(p);p.connect(fx[srcDef.bus]||fx.comp);
-              synths[id]=s;gains[id]=g;panners[id]=p;
-            }
+            DEFS[id]={cat:srcDef.cat,name:id,sym:srcDef.sym,tier:saved.tier||srcDef.tier,angle:saved.angle||0,type:srcDef.type,bus:srcDef.bus,defOn:true};
+            E.inst[id]={on:true,angle:0,tier:0,pan:0,vol:1,uVol:1,sus:0.5,pat:Array.from({length:ST},()=>[]),patRoot:undefined};
+            if(booted){const s=FACTORY[base](),g=new Tone.Gain(1),p=new Tone.Panner(0);s.connect(g);g.connect(p);p.connect(fx[srcDef.bus]||fx.comp);synths[id]=s;gains[id]=g;panners[id]=p;}
           }
-        } else return; // unknown instrument, skip
+        } else return;
       }
+      const st=E.inst[id];
+      if(saved.on!==undefined) st.on=saved.on;
+      if(saved.angle!==undefined) { st.angle=saved.angle; st.pan=Math.sin(saved.angle*Math.PI/180); }
+      if(saved.tier!==undefined) { st.tier=saved.tier; st.vol=TV[saved.tier]; }
+      if(saved.uVol!==undefined) st.uVol=saved.uVol;
+      if(saved.sus!==undefined) st.sus=saved.sus;
+      if(saved.pat) st.pat=saved.pat.map(p=>Array.isArray(p)?[...p]:[]);
+      if(saved.patRoot!==undefined) st.patRoot=saved.patRoot;
 
-      const st = E.inst[id];
-      if(saved.on !== undefined) st.on = saved.on;
-      if(saved.angle !== undefined) { st.angle = saved.angle; st.pan = Math.sin(saved.angle * Math.PI/180); }
-      if(saved.tier !== undefined) { st.tier = saved.tier; st.vol = TV[saved.tier]; }
-      if(saved.uVol !== undefined) st.uVol = saved.uVol;
-      if(saved.sus !== undefined) st.sus = saved.sus;
-      if(saved.pat) { st.pat = saved.pat.map(p => Array.isArray(p) ? [...p] : []); }
-      if(saved.usePat !== undefined) st.usePat = saved.usePat;
-      if(saved.patRoot !== undefined) st.patRoot = saved.patRoot;
-
-      // Apply to live audio
       if(booted){
-        if(gains[id]) gains[id].gain.rampTo(st.vol * st.uVol, 0.1);
-        if(panners[id]) panners[id].pan.value = st.pan;
-        if(synths[id] && saved.sus !== undefined){
-          try{ synths[id].set({envelope:{sustain:st.sus, release:0.1+st.sus*2}}); }catch(e){}
-        }
+        if(gains[id]) gains[id].gain.rampTo(st.vol*st.uVol,0.1);
+        if(panners[id]) panners[id].pan.value=st.pan;
+        if(synths[id]&&saved.sus!==undefined)try{synths[id].set({envelope:{sustain:st.sus,release:0.1+st.sus*2}})}catch(e){}
       }
     });
   }
-
-  // Apply transport
-  if(booted){
-    Tone.Transport.bpm.rampTo(E.tempo, 1);
-    if(fx.filt) fx.filt.frequency.rampTo(E.fc, 0.5);
-  }
-
-  // Refresh UI
-  buildStage();
-  upUI();
-  renderChords();
-  if(selInst) openPat(selInst);
+  if(booted){Tone.Transport.bpm.rampTo(E.tempo,1);if(fx.filt)fx.filt.frequency.rampTo(E.fc,0.5)}
+  buildStage();upUI();renderChords();if(selInst)openPat(selInst);
 }
 
-// Init
 buildStage();
 </script>
 </body>
