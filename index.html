@@ -683,6 +683,56 @@ canvas#sbg{
   border-color: var(--g);
 }
 
+/* A/B Variant toggle */
+.ab-togs{
+  display: flex;
+  gap: var(--s1);
+  align-items: center;
+  background: rgba(167,139,250,0.04);
+  padding: 5px 10px;
+  border-radius: var(--r2);
+  border: 1px solid rgba(167,139,250,0.15);
+}
+.ab-togs label{
+  font-family: 'JetBrains Mono',monospace;
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--t-muted);
+  margin-right: var(--s1);
+  font-weight: 500;
+}
+.abtog{
+  width: 22px;
+  height: 22px;
+  border: 1px solid rgba(167,139,250,0.25);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'JetBrains Mono',monospace;
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  color: rgba(167,139,250,0.5);
+  cursor: pointer;
+  transition: 0.12s;
+}
+.abtog.cur{
+  border-color: var(--v);
+  color: var(--v);
+  background: rgba(167,139,250,0.12);
+  box-shadow: 0 0 6px rgba(167,139,250,0.3);
+}
+.absync{
+  font-size: 14px;
+  color: var(--t-muted);
+  cursor: pointer;
+  padding: 0 4px;
+  transition: 0.12s;
+  user-select: none;
+}
+.absync:hover{color: var(--v); transform: rotate(180deg)}
+
 .pact{display: flex; gap: var(--s1)}
 .pact button{
   background: rgba(0,229,255,0.02);
@@ -915,11 +965,19 @@ canvas#sbg{
         <div class="ctog on" onclick="togC(2)" id="ctog-2">3</div>
         <div class="ctog on" onclick="togC(3)" id="ctog-3">4</div>
       </div>
+      <div class="ab-togs m">
+        <label>Var</label>
+        <div class="abtog cur" id="ab-A" onclick="setVariant('A')">A</div>
+        <div class="abtog" id="ab-B" onclick="setVariant('B')">B</div>
+        <div class="absync" onclick="copyVariant()" title="Copy A→B">⇔</div>
+      </div>
       <div class="pact m">
         <button onclick="clearPat()">Clear</button>
         <button onclick="randPat(selInst)">Regen</button>
         <button onclick="randChaos()">Chaos</button>
+        <button onclick="humanize()">Humanize</button>
         <button onclick="cloneInst()">Clone</button>
+        <button id="delBtn" onclick="deleteInst()" style="display:none;color:var(--m);border-color:rgba(244,114,182,0.3)">Delete</button>
         <button onclick="deselect()">✕</button>
       </div>
     </div>
@@ -1164,6 +1222,9 @@ Object.entries(DEFS).forEach(([id, d]) => {
     vol: TV[d.tier], uVol: 1.0, sus: 0.5,
     pat: Array.from({length: ST}, () => []),
     vel: Array(ST).fill(1.0), // velocity per step (1.0 = full, 0.5 = soft)
+    patB: Array.from({length: ST}, () => []),
+    velB: Array(ST).fill(1.0),
+    variant: 'A', // 'A' or 'B' — which pattern is currently playing
     usePat: false, patRoot: undefined,
     chordAllowed: [true, true, true, true],
     iFx: {rev: 0, del: 0}
@@ -1180,7 +1241,7 @@ const KEYS_DATA = {
   'B':{minor:[['B3','D4','F#4'],['G3','B3','D4'],['A3','C#4','E4'],['F#3','A#3','C#4']],major:[['B3','D#4','F#4'],['E3','G#3','B3'],['F#3','A#3','C#4'],['G#3','B3','D#4']]}
 };
 
-let synths={}, panners={}, gains={}, fx={}, analyser=null;
+let synths={}, panners={}, gains={}, sends={}, fx={}, analyser=null;
 let booted=false, cStep=0, selInst=null, cloneCount=0;
 let gKey='', apiSt='', autoProg=true;
 const GM = ['gemini-2.5-flash-preview-09-2025', 'gemini-2.0-flash'];
@@ -1381,8 +1442,10 @@ function setISus(v){
 function setIFx(which, v){
   if(!selInst) return;
   E.inst[selInst].iFx[which] = +v;
-  // Per-instrument sends are visual only for now — bus routing handles actual FX.
-  // Could be expanded to individual sends later.
+  if(!sends[selInst]) return;
+  const n = v / 100;
+  if(which === 'rev') sends[selInst].rev.gain.rampTo(n * 0.8, 0.15);
+  if(which === 'del') sends[selInst].del.gain.rampTo(n * 0.6, 0.15);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1537,27 +1600,118 @@ window.addEventListener('resize', () => {
 // ═══════════════════════════════════════════════════════════
 function cloneInst(){
   if(!selInst || !booted) return;
-  const base = selInst.split('_')[0], d = DEFS[base], st = E.inst[selInst];
+  const base = selInst.split('_')[0];
+  const srcDef = DEFS[base];
+  const st = E.inst[selInst];
+  if(!srcDef || !st){ lg('Cannot clone'); return; }
+
   cloneCount++;
   const nid = base + '_' + cloneCount;
-  E.inst[nid] = {
-    on: true, angle: (st.angle || 0) + 16, tier: st.tier,
-    pan: Math.sin(((st.angle || 0) + 16) * Math.PI/180),
-    vol: TV[st.tier], uVol: st.uVol, sus: st.sus,
-    pat: st.pat.map(p => [...p]), vel: [...st.vel],
-    usePat: st.usePat, patRoot: st.patRoot,
-    chordAllowed: [...st.chordAllowed], iFx: {...st.iFx}
+
+  // Register the clone in DEFS so buildStage can render it
+  DEFS[nid] = {
+    cat: srcDef.cat, name: srcDef.name, sym: srcDef.sym,
+    tier: st.tier, angle: (st.angle || 0) + 18,
+    type: srcDef.type, bus: srcDef.bus, defOn: true
   };
-  const s = FACTORY[base]();
-  const g = new Tone.Gain(E.inst[nid].vol * E.inst[nid].uVol);
-  const p = new Tone.Panner(E.inst[nid].pan);
-  s.connect(g); g.connect(p); p.connect(fx[d.bus] || fx.comp);
-  synths[nid] = s; gains[nid] = g; panners[nid] = p;
+
+  // Clone state with independent arrays
+  E.inst[nid] = {
+    on: true,
+    angle: DEFS[nid].angle,
+    tier: st.tier,
+    pan: Math.sin(DEFS[nid].angle * Math.PI/180),
+    vol: TV[st.tier],
+    uVol: st.uVol,
+    sus: st.sus,
+    pat: st.pat.map(p => [...p]),
+    vel: [...st.vel],
+    usePat: st.usePat,
+    patRoot: st.patRoot,
+    chordAllowed: [...st.chordAllowed],
+    iFx: {...st.iFx}
+  };
+
+  // Build the synth + vibrato for strings + per-instrument FX sends
+  wireInstrument(nid, base);
+
+  // Apply clone's sustain/iFx immediately
+  try {
+    synths[nid].set({envelope: {sustain: st.sus, release: 0.15 + st.sus*2.5}});
+  } catch(e){}
+  if(sends[nid]){
+    sends[nid].rev.gain.value = (st.iFx.rev || 0) / 100 * 0.8;
+    sends[nid].del.gain.value = (st.iFx.del || 0) / 100 * 0.6;
+  }
+
   buildStage();
   selInst = nid;
   upStage();
   openPat(nid);
-  lg('Cloned ' + d.name);
+  lg('Cloned ' + srcDef.name + ' → ' + srcDef.name + ' ' + cloneCount);
+}
+
+function deleteInst(){
+  if(!selInst) return;
+  // Only allow deleting clones
+  if(!selInst.includes('_')){ lg('Can only delete clones'); return; }
+  const id = selInst;
+
+  // Disconnect audio
+  try {
+    if(synths[id]) synths[id].disconnect();
+    if(gains[id]) gains[id].disconnect();
+    if(panners[id]) panners[id].disconnect();
+    if(sends[id]){ sends[id].rev.disconnect(); sends[id].del.disconnect(); }
+    if(VIBRATO[id]) VIBRATO[id].disconnect();
+  } catch(e){}
+
+  delete synths[id];
+  delete gains[id];
+  delete panners[id];
+  delete sends[id];
+  delete VIBRATO[id];
+  delete DEFS[id];
+  delete E.inst[id];
+
+  selInst = null;
+  document.getElementById('pw').classList.remove('open');
+  buildStage();
+  lg('Deleted');
+}
+
+// Shared wiring function — used by boot AND clone
+// Sets up: synth → (vibrato for strings) → gain → panner → bus
+// Plus per-instrument reverb/delay sends that tap off the gain node
+function wireInstrument(id, baseId){
+  const def = DEFS[baseId];
+  const st = E.inst[id];
+  const s = FACTORY[baseId]();
+  const g = new Tone.Gain(st.vol * st.uVol);
+  const p = new Tone.Panner(st.pan);
+
+  // Vibrato for strings
+  if(['violin','cello','hurdy'].includes(baseId)){
+    const vib = new Tone.Vibrato({frequency: 4.5 + Math.random()*0.8, depth: 0.09});
+    s.connect(vib); vib.connect(g);
+    VIBRATO[id] = vib;
+  } else {
+    s.connect(g);
+  }
+
+  g.connect(p);
+  p.connect(fx[def.bus] || fx.comp);
+
+  // Per-instrument FX sends (tap off gain, send to master rev/del)
+  const revSend = new Tone.Gain((st.iFx.rev || 0) / 100 * 0.8);
+  const delSend = new Tone.Gain((st.iFx.del || 0) / 100 * 0.6);
+  g.connect(revSend); revSend.connect(fx.rev);
+  g.connect(delSend); delSend.connect(fx.del);
+
+  synths[id] = s;
+  gains[id] = g;
+  panners[id] = p;
+  sends[id] = {rev: revSend, del: delSend};
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1567,6 +1721,55 @@ function togC(i){
   if(!selInst) return;
   E.inst[selInst].chordAllowed[i] = !E.inst[selInst].chordAllowed[i];
   upCT();
+}
+
+// A/B Variant management
+function setVariant(v){
+  if(!selInst) return;
+  const st = E.inst[selInst];
+  // Save current editor state back into the right slot
+  // (Actually — pat/vel are live references, so swapping means reassigning)
+  if(st.variant === v) return; // already here
+
+  // Swap: store current into the opposite slot, load the selected slot into live
+  if(st.variant === 'A'){
+    // Currently editing A, moving to B: swap pat↔patB
+    const tmpP = st.pat, tmpV = st.vel;
+    st.pat = st.patB; st.vel = st.velB;
+    st.patB = tmpP; st.velB = tmpV;
+  } else {
+    const tmpP = st.pat, tmpV = st.vel;
+    st.pat = st.patB; st.vel = st.velB;
+    st.patB = tmpP; st.velB = tmpV;
+  }
+  st.variant = v;
+  document.getElementById('ab-A').classList.toggle('cur', v === 'A');
+  document.getElementById('ab-B').classList.toggle('cur', v === 'B');
+  openPat(selInst);
+  lg('Variant ' + v);
+}
+
+function copyVariant(){
+  if(!selInst) return;
+  const st = E.inst[selInst];
+  st.patB = st.pat.map(p => [...p]);
+  st.velB = [...st.vel];
+  lg('Copied ' + st.variant + ' → ' + (st.variant==='A'?'B':'A'));
+}
+
+// Humanize: subtly vary velocities for a less robotic feel
+function humanize(){
+  if(!selInst) return;
+  const st = E.inst[selInst];
+  for(let s=0; s<ST; s++){
+    if(st.pat[s].length){
+      // Variance: ±0.15 around current velocity, clamped
+      const jitter = (Math.random() - 0.5) * 0.3;
+      st.vel[s] = Math.max(0.35, Math.min(1.0, st.vel[s] + jitter));
+    }
+  }
+  openPat(selInst);
+  lg('Humanized');
 }
 
 function upCT(){
@@ -1596,6 +1799,9 @@ function openPat(id){
   document.getElementById('iDel').value = st.iFx.del || 0;
   document.getElementById('kmsel').classList.toggle('show', base === 'keys');
   document.getElementById('smsel').classList.toggle('show', ['violin','cello','hurdy'].includes(base));
+  document.getElementById('delBtn').style.display = id.includes('_') ? '' : 'none';
+  document.getElementById('ab-A').classList.toggle('cur', st.variant === 'A');
+  document.getElementById('ab-B').classList.toggle('cur', st.variant === 'B');
   upCT();
 
   const g = document.getElementById('sg'), isR = d.cat === 'rhythm';
@@ -1792,27 +1998,10 @@ async function boot(){
   analyser   = new Tone.Analyser('waveform', 512);
   fx.master.connect(analyser);
 
-  // Wire instruments & set up vibrato for strings
+  // Wire all instruments using shared function
   Object.entries(DEFS).forEach(([id, d]) => {
-    const st = E.inst[id], bus = d.bus || 'comp';
-    const s = FACTORY[id]();
-    const g = new Tone.Gain(st.vol * st.uVol);
-    const p = new Tone.Panner(st.pan);
-
-    // Add vibrato to strings
-    if(['violin','cello','hurdy'].includes(id)){
-      const vib = new Tone.Vibrato({frequency: 4.5 + Math.random(), depth: 0.08});
-      s.connect(vib); vib.connect(g);
-      VIBRATO[id] = vib;
-    } else {
-      s.connect(g);
-    }
-    g.connect(p);
-    p.connect(fx[bus] || fx.comp);
-    synths[id] = s;
-    gains[id] = g;
-    panners[id] = p;
-
+    const st = E.inst[id];
+    wireInstrument(id, id);
     // Prepopulate visible patterns for default-on instruments
     if(st.on && d.cat !== 'atmo') randPat(id);
   });
@@ -2248,7 +2437,7 @@ function lg(m){ document.getElementById('log').textContent = '> ' + m; }
 // ═══════════════════════════════════════════════════════════
 function saveSong(){
   const song = {
-    version: 15,
+    version: 16,
     name: prompt('Song name:', 'Untitled') || 'Untitled',
     timestamp: new Date().toISOString(),
     tempo: E.tempo, energy: E.energy, key: E.key, mode: E.mode,
@@ -2261,6 +2450,7 @@ function saveSong(){
       on: st.on, angle: st.angle, tier: st.tier,
       uVol: st.uVol, sus: st.sus,
       pat: st.pat, vel: st.vel,
+      patB: st.patB, velB: st.velB, variant: st.variant,
       usePat: st.usePat, patRoot: st.patRoot,
       chordAllowed: st.chordAllowed,
       iFx: st.iFx,
@@ -2306,25 +2496,34 @@ function applySong(song){
   if(song.instruments){
     Object.entries(song.instruments).forEach(([id, saved]) => {
       if(!E.inst[id]){
-        // Cloned instrument — recreate
+        // Cloned instrument — recreate fully
         if(saved.isClone && saved.cloneBase && FACTORY[saved.cloneBase]){
           const base = saved.cloneBase, srcDef = DEFS[base];
           if(srcDef){
+            // Register in DEFS
+            DEFS[id] = {
+              cat: srcDef.cat, name: srcDef.name, sym: srcDef.sym,
+              tier: saved.tier || 0, angle: saved.angle || 0,
+              type: srcDef.type, bus: srcDef.bus, defOn: true
+            };
             E.inst[id] = {
-              on: true, angle: saved.angle || 0, tier: saved.tier || 0,
-              pan: Math.sin((saved.angle||0)*Math.PI/180), vol: TV[saved.tier||0],
-              uVol: 1, sus: 0.5, pat: Array.from({length:ST}, ()=>[]),
+              on: saved.on !== false,
+              angle: saved.angle || 0, tier: saved.tier || 0,
+              pan: Math.sin((saved.angle||0)*Math.PI/180),
+              vol: TV[saved.tier||0],
+              uVol: 1, sus: 0.5,
+              pat: Array.from({length:ST}, ()=>[]),
               vel: Array(ST).fill(1.0),
+              patB: Array.from({length:ST}, ()=>[]),
+              velB: Array(ST).fill(1.0),
+              variant: 'A',
               usePat: false, patRoot: undefined,
               chordAllowed: [true,true,true,true], iFx: {rev:0, del:0}
             };
-            if(booted){
-              const s = FACTORY[base]();
-              const g = new Tone.Gain(1);
-              const p = new Tone.Panner(0);
-              s.connect(g); g.connect(p); p.connect(fx[srcDef.bus] || fx.comp);
-              synths[id] = s; gains[id] = g; panners[id] = p;
-            }
+            // Track clone counter so future clones don't collide
+            const num = parseInt(id.split('_')[1]);
+            if(!isNaN(num) && num > cloneCount) cloneCount = num;
+            if(booted) wireInstrument(id, base);
           }
         } else return;
       }
@@ -2335,13 +2534,23 @@ function applySong(song){
         else if(k === 'tier'){ st.tier = v; st.vol = TV[v]; }
         else if(k === 'pat' && Array.isArray(v)) st.pat = v.map(p => Array.isArray(p) ? [...p] : []);
         else if(k === 'vel' && Array.isArray(v)) st.vel = [...v];
+        else if(k === 'patB' && Array.isArray(v)) st.patB = v.map(p => Array.isArray(p) ? [...p] : []);
+        else if(k === 'velB' && Array.isArray(v)) st.velB = [...v];
         else if(k === 'chordAllowed' && Array.isArray(v)) st.chordAllowed = [...v];
         else if(k === 'iFx' && v) st.iFx = {...v};
         else if(v !== undefined) st[k] = v;
       });
+      // Ensure variant fields exist for legacy saves
+      if(!st.patB) st.patB = Array.from({length:ST}, ()=>[]);
+      if(!st.velB) st.velB = Array(ST).fill(1.0);
+      if(!st.variant) st.variant = 'A';
       if(booted){
         if(gains[id]) gains[id].gain.rampTo(st.vol * st.uVol, 0.1);
         if(panners[id]) panners[id].pan.value = st.pan;
+        if(sends[id]){
+          sends[id].rev.gain.rampTo((st.iFx.rev || 0) / 100 * 0.8, 0.2);
+          sends[id].del.gain.rampTo((st.iFx.del || 0) / 100 * 0.6, 0.2);
+        }
         if(synths[id] && saved.sus !== undefined) try {
           synths[id].set({envelope: {sustain: st.sus, release: 0.15 + st.sus*2.5}});
         } catch(e){}
