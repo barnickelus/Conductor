@@ -772,28 +772,38 @@ canvas#sbg{
   font-weight: 500;
 }
 .vmap-pill{
-  padding: 3px 8px;
-  border-radius: 3px;
+  padding: 4px 10px;
+  border-radius: 4px;
   border: 1px solid var(--border);
   font-family: 'JetBrains Mono',monospace;
   font-size: var(--fs-sm);
   font-weight: 700;
   cursor: pointer;
   transition: 0.12s;
-  min-width: 28px;
+  min-width: 30px;
   text-align: center;
+  color: var(--t-dim);
+  background: rgba(167,139,250,0.03);
+  position: relative;
 }
-.vmap-pill.varA{
-  color: var(--c);
-  border-color: rgba(0,229,255,0.3);
-  background: rgba(0,229,255,0.06);
-}
-.vmap-pill.varB{
+.vmap-pill:hover{border-color: var(--v); color: var(--v)}
+.vmap-pill.sel{
+  border-color: var(--v);
   color: var(--v);
-  border-color: rgba(167,139,250,0.4);
-  background: rgba(167,139,250,0.1);
+  background: rgba(167,139,250,0.18);
+  box-shadow: 0 0 8px rgba(167,139,250,0.35);
 }
-.vmap-pill:hover{transform: scale(1.08)}
+.vmap-pill.playing::after{
+  content: '';
+  position: absolute;
+  bottom: -3px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px; height: 4px;
+  border-radius: 50%;
+  background: var(--g);
+  box-shadow: 0 0 5px var(--g);
+}
 .vmap-hint{
   font-family: 'JetBrains Mono',monospace;
   font-size: var(--fs-xs);
@@ -1218,12 +1228,12 @@ canvas#sbg{
       </div>
     </div>
     <div class="variant-row m" id="variantRow" style="display:none">
-      <label>Per Chord →</label>
-      <div class="vmap-pill m varA" id="vmap-0" onclick="cycleVariantForChord(0)">1A</div>
-      <div class="vmap-pill m varA" id="vmap-1" onclick="cycleVariantForChord(1)">2A</div>
-      <div class="vmap-pill m varB" id="vmap-2" onclick="cycleVariantForChord(2)">3B</div>
-      <div class="vmap-pill m varB" id="vmap-3" onclick="cycleVariantForChord(3)">4B</div>
-      <div class="vmap-hint m">tap to flip · sequencer uses this mapping</div>
+      <label>Edit Chord</label>
+      <div class="vmap-pill m sel" id="vmap-0" onclick="cycleVariantForChord(0)">1</div>
+      <div class="vmap-pill m" id="vmap-1" onclick="cycleVariantForChord(1)">2</div>
+      <div class="vmap-pill m" id="vmap-2" onclick="cycleVariantForChord(2)">3</div>
+      <div class="vmap-pill m" id="vmap-3" onclick="cycleVariantForChord(3)">4</div>
+      <div class="vmap-hint m">each chord plays its own unique notes</div>
     </div>
     </div>
     <div class="pfx m">
@@ -1489,15 +1499,32 @@ Object.entries(DEFS).forEach(([id, d]) => {
     on: d.defOn, angle: d.angle, tier: d.tier,
     pan: Math.sin(d.angle * Math.PI/180),
     vol: TV[d.tier], uVol: 1.0, sus: 0.5,
+    // Manual A/B variants (used when variantAuto is OFF)
     pat: Array.from({length: ST}, () => []),
     vel: Array(ST).fill(1.0),
     prob: Array(ST).fill(1.0),
     patB: Array.from({length: ST}, () => []),
     velB: Array(ST).fill(1.0),
     probB: Array(ST).fill(1.0),
-    variant: 'A',         // which variant the editor shows
-    variantAuto: false,   // if true, sequencer uses variantMap per chord
-    variantMap: ['A','A','B','B'], // per-chord variant mapping
+    variant: 'A',
+    // Per-chord unique patterns (used when variantAuto is ON)
+    // 4 independent slots, one per chord in the progression
+    cPat: [
+      Array.from({length: ST}, () => []),
+      Array.from({length: ST}, () => []),
+      Array.from({length: ST}, () => []),
+      Array.from({length: ST}, () => [])
+    ],
+    cVel: [
+      Array(ST).fill(1.0), Array(ST).fill(1.0),
+      Array(ST).fill(1.0), Array(ST).fill(1.0)
+    ],
+    cProb: [
+      Array(ST).fill(1.0), Array(ST).fill(1.0),
+      Array(ST).fill(1.0), Array(ST).fill(1.0)
+    ],
+    editingChord: 0,       // which chord slot the editor shows (0-3)
+    variantAuto: false,    // true = per-chord mode, false = A/B mode
     usePat: false, patRoot: undefined,
     chordAllowed: [true, true, true, true],
     iFx: {rev: 0, del: 0}
@@ -1910,12 +1937,16 @@ function cloneInst(){
     probB: [...(st.probB || Array(ST).fill(1.0))],
     variant: st.variant || 'A',
     variantAuto: !!st.variantAuto,
-    variantMap: [...(st.variantMap || ['A','A','B','B'])],
+    cPat: (st.cPat || []).map(slot => (slot || []).map(p => Array.isArray(p) ? [...p] : [])),
+    cVel: (st.cVel || []).map(arr => [...(arr || [])]),
+    cProb: (st.cProb || []).map(arr => [...(arr || [])]),
+    editingChord: st.editingChord || 0,
     usePat: st.usePat,
     patRoot: st.patRoot,
     chordAllowed: [...st.chordAllowed],
     iFx: {...st.iFx}
   };
+  initChordSlots(E.inst[nid]);
 
   // Build the synth + vibrato for strings + per-instrument FX sends
   wireInstrument(nid, base);
@@ -2009,36 +2040,76 @@ function togC(i){
 }
 
 // ═══════════════════════════════════════════════════════════
-// VARIANT SLOTS — non-destructive, supports chord-linked mode
-// pat/vel/prob always store A. patB/velB/probB always store B.
-// st.variant = which one the EDITOR shows.
-// st.variantAuto = sequencer uses variantMap instead of variant.
+// VARIANT / CHORD SLOTS
+// Two modes:
+//   OFF (variantAuto=false): A/B manual toggle. Editor & sequencer
+//     both follow st.variant.
+//   ON (variantAuto=true): Each chord has its own unique pattern.
+//     Editor shows st.cPat[st.editingChord]; sequencer uses
+//     st.cPat[E.ci] automatically.
 // ═══════════════════════════════════════════════════════════
-function liveSlot(st, which){
-  const v = which || st.variant;
-  return v === 'B'
+function liveSlot(st){
+  if(st.variantAuto){
+    const i = st.editingChord || 0;
+    if(!st.cPat) initChordSlots(st);
+    return {pat: st.cPat[i], vel: st.cVel[i], prob: st.cProb[i]};
+  }
+  return st.variant === 'B'
     ? {pat: st.patB, vel: st.velB, prob: st.probB}
     : {pat: st.pat, vel: st.vel, prob: st.prob};
 }
 function setLiveSlot(st, pat, vel, prob){
-  if(st.variant === 'B'){
+  if(st.variantAuto){
+    const i = st.editingChord || 0;
+    if(!st.cPat) initChordSlots(st);
+    st.cPat[i] = pat; st.cVel[i] = vel; st.cProb[i] = prob;
+  } else if(st.variant === 'B'){
     st.patB = pat; st.velB = vel; st.probB = prob;
   } else {
     st.pat = pat; st.vel = vel; st.prob = prob;
   }
 }
-// Which variant should play at the current chord
-function activeVariantAt(st, chordIdx){
-  if(st.variantAuto) return (st.variantMap && st.variantMap[chordIdx]) || 'A';
-  return st.variant;
+// What slot should PLAY for a given chord index?
+function activeSlotAt(st, chordIdx){
+  if(st.variantAuto){
+    if(!st.cPat) initChordSlots(st);
+    return {
+      pat: st.cPat[chordIdx] || [],
+      vel: st.cVel[chordIdx] || [],
+      prob: st.cProb[chordIdx] || []
+    };
+  }
+  return st.variant === 'B'
+    ? {pat: st.patB || [], vel: st.velB || [], prob: st.probB || []}
+    : {pat: st.pat || [],  vel: st.vel || [],  prob: st.prob || []};
 }
 
-// A/B Variant management (non-destructive — just switches the editor view)
+// Initialize the 4 per-chord slots (idempotent)
+function initChordSlots(st){
+  if(!st.cPat) st.cPat = [[],[],[],[]].map(() => Array.from({length:ST}, ()=>[]));
+  if(!st.cVel) st.cVel = [[],[],[],[]].map(() => Array(ST).fill(1.0));
+  if(!st.cProb) st.cProb = [[],[],[],[]].map(() => Array(ST).fill(1.0));
+  for(let i=0; i<4; i++){
+    if(!Array.isArray(st.cPat[i])) st.cPat[i] = Array.from({length:ST}, ()=>[]);
+    if(!Array.isArray(st.cVel[i])) st.cVel[i] = Array(ST).fill(1.0);
+    if(!Array.isArray(st.cProb[i])) st.cProb[i] = Array(ST).fill(1.0);
+  }
+}
+
+// Does this instrument have ANY pattern data across any slot?
+function hasAnyPattern(st){
+  if(st.pat && st.pat.some(p => p && p.length)) return true;
+  if(st.patB && st.patB.some(p => p && p.length)) return true;
+  if(st.cPat && st.cPat.some(cp => Array.isArray(cp) && cp.some(s => s && s.length))) return true;
+  return false;
+}
+
+// A/B Variant management (only meaningful when variantAuto is OFF)
 function setVariant(v){
   if(!selInst) return;
   const st = E.inst[selInst];
+  if(st.variantAuto){ lg('Turn off 🔗 to use A/B'); return; }
   if(st.variant === v) return;
-  // Ensure B slot exists
   if(!st.patB) st.patB = Array.from({length:ST}, ()=>[]);
   if(!st.velB) st.velB = Array(ST).fill(1.0);
   if(!st.probB) st.probB = Array(ST).fill(1.0);
@@ -2052,52 +2123,94 @@ function setVariant(v){
 function copyVariant(){
   if(!selInst) return;
   const st = E.inst[selInst];
-  // Copy the variant currently being edited into the other slot
-  if(st.variant === 'A'){
-    st.patB = st.pat.map(p => [...p]);
-    st.velB = [...st.vel];
-    st.probB = [...(st.prob || Array(ST).fill(1.0))];
-    lg('Copied A → B');
+  if(st.variantAuto){
+    // In chord mode: copy current editing chord to all 4 chord slots
+    const src = st.editingChord || 0;
+    const srcPat = st.cPat[src].map(p => [...p]);
+    const srcVel = [...st.cVel[src]];
+    const srcProb = [...st.cProb[src]];
+    for(let i=0; i<4; i++){
+      if(i === src) continue;
+      st.cPat[i] = srcPat.map(p => [...p]);
+      st.cVel[i] = [...srcVel];
+      st.cProb[i] = [...srcProb];
+    }
+    lg('Copied chord ' + (src+1) + ' → all chords');
   } else {
-    st.pat = st.patB.map(p => [...p]);
-    st.vel = [...st.velB];
-    st.prob = [...(st.probB || Array(ST).fill(1.0))];
-    lg('Copied B → A');
+    if(st.variant === 'A'){
+      st.patB = st.pat.map(p => [...p]);
+      st.velB = [...st.vel];
+      st.probB = [...(st.prob || Array(ST).fill(1.0))];
+      lg('Copied A → B');
+    } else {
+      st.pat = st.patB.map(p => [...p]);
+      st.vel = [...st.velB];
+      st.prob = [...(st.probB || Array(ST).fill(1.0))];
+      lg('Copied B → A');
+    }
   }
 }
 
-// Toggle chord→variant auto-mapping
+// Toggle between per-chord mode and A/B mode
 function toggleVariantAuto(){
   if(!selInst) return;
   const st = E.inst[selInst];
   st.variantAuto = !st.variantAuto;
-  if(!st.variantMap) st.variantMap = ['A','A','B','B'];
+
+  if(st.variantAuto){
+    initChordSlots(st);
+    // First-time seed: if all 4 chord slots empty, copy current A/B into all 4
+    const anyFilled = st.cPat.some(cp => cp.some(s => s && s.length));
+    if(!anyFilled){
+      const src = st.variant === 'B'
+        ? {pat: st.patB, vel: st.velB, prob: st.probB}
+        : {pat: st.pat, vel: st.vel, prob: st.prob};
+      for(let i=0; i<4; i++){
+        st.cPat[i] = (src.pat || []).map(p => Array.isArray(p) ? [...p] : []);
+        st.cVel[i] = [...(src.vel || Array(ST).fill(1.0))];
+        st.cProb[i] = [...(src.prob || Array(ST).fill(1.0))];
+      }
+    }
+    // Start editing the currently playing chord
+    st.editingChord = E.ci;
+  }
+
   document.getElementById('linkBtn').classList.toggle('active', st.variantAuto);
   document.getElementById('variantRow').style.display = st.variantAuto ? 'flex' : 'none';
+  document.getElementById('ab-A').style.opacity = st.variantAuto ? '0.35' : '';
+  document.getElementById('ab-B').style.opacity = st.variantAuto ? '0.35' : '';
   renderVariantRow();
-  lg(st.variantAuto ? 'Auto: variant follows chord' : 'Auto off — manual A/B');
+  openPat(selInst);
+  lg(st.variantAuto
+    ? 'Per-chord patterns ON — each chord has unique notes'
+    : 'Per-chord OFF — using A/B variants');
 }
 
 function renderVariantRow(){
   if(!selInst) return;
   const st = E.inst[selInst];
-  if(!st.variantMap) st.variantMap = ['A','A','B','B'];
+  if(!st.variantAuto) return;
+  if(st.editingChord === undefined) st.editingChord = 0;
   for(let i=0; i<4; i++){
     const el = document.getElementById('vmap-' + i);
     if(el){
-      const v = st.variantMap[i] || 'A';
-      el.textContent = (i+1) + v;
-      el.className = 'vmap-pill m ' + (v === 'B' ? 'varB' : 'varA');
+      el.textContent = (i+1);
+      el.className = 'vmap-pill m'
+        + (i === st.editingChord ? ' sel' : '')
+        + (i === E.ci ? ' playing' : '');
     }
   }
 }
 
+// User taps a chord-slot pill to change which chord they're editing
 function cycleVariantForChord(i){
   if(!selInst) return;
   const st = E.inst[selInst];
-  if(!st.variantMap) st.variantMap = ['A','A','B','B'];
-  st.variantMap[i] = st.variantMap[i] === 'A' ? 'B' : 'A';
+  if(!st.variantAuto) return; // only meaningful in chord mode
+  st.editingChord = i;
   renderVariantRow();
+  openPat(selInst);
+  lg('Editing chord ' + (i+1));
 }
 
 // Humanize: subtly vary velocities for a less robotic feel
@@ -2146,9 +2259,11 @@ function openPat(id){
   document.getElementById('delBtn').style.display = id.includes('_') ? '' : 'none';
   document.getElementById('ab-A').classList.toggle('cur', st.variant === 'A');
   document.getElementById('ab-B').classList.toggle('cur', st.variant === 'B');
+  document.getElementById('ab-A').style.opacity = st.variantAuto ? '0.35' : '';
+  document.getElementById('ab-B').style.opacity = st.variantAuto ? '0.35' : '';
   document.getElementById('linkBtn').classList.toggle('active', !!st.variantAuto);
   document.getElementById('variantRow').style.display = st.variantAuto ? 'flex' : 'none';
-  if(st.variantAuto) renderVariantRow();
+  if(st.variantAuto){ initChordSlots(st); renderVariantRow(); }
   upCT();
 
   const g = document.getElementById('sg'), isR = d.cat === 'rhythm';
@@ -2156,7 +2271,7 @@ function openPat(id){
   g.className = 'sg ' + (isR ? 'rh' : 'mel');
   const notes = isR ? [] : patNotes(id);
 
-  // Ensure both slots exist
+  // Ensure A/B slots exist
   if(!st.patB) st.patB = Array.from({length:ST}, ()=>[]);
   if(!st.velB) st.velB = Array(ST).fill(1.0);
   if(!st.probB) st.probB = Array(ST).fill(1.0);
@@ -2192,7 +2307,7 @@ function openPat(id){
           slot.pat[s] = slot.pat[s].length ? [] : ['hit'];
           if(slot.pat[s].length){ slot.vel[s] = 0.8; slot.prob[s] = 1.0; }
           // usePat reflects whether EITHER slot has content
-          st.usePat = st.pat.some(p => p.length) || st.patB.some(p => p.length);
+          st.usePat = hasAnyPattern(st);
           cell.classList.toggle('on', slot.pat[s].length > 0);
           cell.classList.remove('accent');
           applyProb(cell, slot.prob[s]);
@@ -2227,7 +2342,7 @@ function openPat(id){
               if(slot.prob[s] === undefined) slot.prob[s] = 1.0;
             }
             row.classList.toggle('on', arr.includes(ns));
-            st.usePat = st.pat.some(p => p.length) || st.patB.some(p => p.length);
+            st.usePat = hasAnyPattern(st);
             if(st.usePat && st.patRoot === undefined) st.patRoot = chordRoot(E.chords[E.ci]);
             if(arr.includes(ns)) applyProb(row, slot.prob[s]);
           }
@@ -2282,7 +2397,7 @@ function clearPat(){
     Array(ST).fill(1.0)
   );
   // usePat reflects whether EITHER slot has content
-  st.usePat = st.pat.some(p => p.length) || st.patB.some(p => p.length);
+  st.usePat = hasAnyPattern(st);
   if(!st.usePat) st.patRoot = undefined;
   openPat(selInst);
   lg('Cleared variant ' + st.variant);
@@ -2365,6 +2480,8 @@ function upChordHL(){
   for(let i=0; i<cells.length; i++)
     cells[i].className = 'pc m' + (i===E.ci?' act':'') + (autoProg?'':(i===E.ci?'':' dim'));
   upCT();
+  // If an instrument with chord mode is selected, refresh which pill shows the "playing" dot
+  if(selInst && E.inst[selInst]?.variantAuto) renderVariantRow();
 }
 
 function randProg(){
@@ -2405,8 +2522,25 @@ async function boot(){
   Object.entries(DEFS).forEach(([id, d]) => {
     const st = E.inst[id];
     wireInstrument(id, id);
-    // Prepopulate visible patterns for default-on instruments
-    if(st.on && d.cat !== 'atmo') randPat(id);
+    // Only generate starter patterns if NO pattern data exists in any slot.
+    // This preserves patterns loaded from presets/JSON BEFORE Play was pressed.
+    if(st.on && d.cat !== 'atmo' && !hasAnyPattern(st)){
+      randPat(id);
+    }
+  });
+
+  // Apply loaded state (sustain, iFx, etc.) to audio nodes — covers the case
+  // where a song was loaded BEFORE boot and these couldn't be applied yet
+  Object.entries(E.inst).forEach(([id, st]) => {
+    if(synths[id]){
+      try { synths[id].set({envelope: {sustain: st.sus, release: 0.15 + st.sus*2.5}}); } catch(e){}
+    }
+    if(sends[id]){
+      sends[id].rev.gain.value = (st.iFx?.rev || 0) / 100 * 0.8;
+      sends[id].del.gain.value = (st.iFx?.del || 0) / 100 * 0.6;
+    }
+    // Ensure usePat reflects any loaded pattern data
+    st.usePat = hasAnyPattern(st);
   });
 
   // Sync initial slider positions visually
@@ -2440,19 +2574,17 @@ async function boot(){
       if(!st.on || !st.chordAllowed[E.ci]) return;
       const base = id.split('_')[0], d = DEFS[base];
       if(!d || d.cat === 'atmo') return;
-      // Pick which variant plays right now
-      const v = activeVariantAt(st, E.ci);
-      const pat = v === 'B' ? (st.patB || []) : (st.pat || []);
-      const vel = v === 'B' ? (st.velB || []) : (st.vel || []);
-      const prob = v === 'B' ? (st.probB || []) : (st.prob || []);
-      if(st.usePat && pat.some(p => p && p.length)){
-        const vals = pat[s16]; if(!vals || !vals.length) return;
-        // Per-step probability gate
-        const stepProb = prob[s16] !== undefined ? prob[s16] : 1.0;
-        if(stepProb < 1.0 && Math.random() > stepProb) return;
-        const stepVel = vel[s16] || 0.8;
-        playPatStep(id, d, ch, vals, playTime, e, stepVel);
-      }
+      if(!st.usePat) return;
+      // Active slot depends on mode (A/B or per-chord)
+      const slot = activeSlotAt(st, E.ci);
+      if(!slot.pat || !slot.pat.some(p => p && p.length)) return;
+      const vals = slot.pat[s16];
+      if(!vals || !vals.length) return;
+      // Per-step probability gate
+      const stepProb = slot.prob[s16] !== undefined ? slot.prob[s16] : 1.0;
+      if(stepProb < 1.0 && Math.random() > stepProb) return;
+      const stepVel = slot.vel[s16] || 0.8;
+      playPatStep(id, d, ch, vals, playTime, e, stepVel);
     });
 
     cStep++;
@@ -2864,7 +2996,8 @@ function saveSong(){
       patB: st.patB, velB: st.velB, probB: st.probB,
       variant: st.variant,
       variantAuto: st.variantAuto,
-      variantMap: st.variantMap,
+      cPat: st.cPat, cVel: st.cVel, cProb: st.cProb,
+      editingChord: st.editingChord,
       usePat: st.usePat, patRoot: st.patRoot,
       chordAllowed: st.chordAllowed,
       iFx: st.iFx,
@@ -2952,7 +3085,9 @@ function applySong(song){
         else if(k === 'patB' && Array.isArray(v)) st.patB = v.map(p => Array.isArray(p) ? [...p] : []);
         else if(k === 'velB' && Array.isArray(v)) st.velB = [...v];
         else if(k === 'probB' && Array.isArray(v)) st.probB = [...v];
-        else if(k === 'variantMap' && Array.isArray(v)) st.variantMap = [...v];
+        else if(k === 'cPat' && Array.isArray(v)) st.cPat = v.map(slot => Array.isArray(slot) ? slot.map(s => Array.isArray(s) ? [...s] : []) : Array.from({length:ST}, ()=>[]));
+        else if(k === 'cVel' && Array.isArray(v)) st.cVel = v.map(arr => Array.isArray(arr) ? [...arr] : Array(ST).fill(1.0));
+        else if(k === 'cProb' && Array.isArray(v)) st.cProb = v.map(arr => Array.isArray(arr) ? [...arr] : Array(ST).fill(1.0));
         else if(k === 'chordAllowed' && Array.isArray(v)) st.chordAllowed = [...v];
         else if(k === 'iFx' && v) st.iFx = {...v};
         else if(v !== undefined) st[k] = v;
@@ -2964,7 +3099,10 @@ function applySong(song){
       if(!st.probB) st.probB = Array(ST).fill(1.0);
       if(!st.variant) st.variant = 'A';
       if(st.variantAuto === undefined) st.variantAuto = false;
-      if(!st.variantMap) st.variantMap = ['A','A','B','B'];
+      if(st.editingChord === undefined) st.editingChord = 0;
+      initChordSlots(st);
+      // Re-derive usePat from actual data (so loaded state plays immediately)
+      st.usePat = hasAnyPattern(st);
       if(booted){
         if(gains[id]) gains[id].gain.rampTo(st.vol * st.uVol, 0.1);
         if(panners[id]) panners[id].pan.value = st.pan;
@@ -3357,7 +3495,7 @@ function exportMIDI(){
     const d = DEFS[(id.split('_')[0])];
     if(!d) return false;
     if(d.cat === 'atmo') return true;
-    return (st.pat && st.pat.some(p => p && p.length)) || (st.patB && st.patB.some(p => p && p.length));
+    return hasAnyPattern(st);
   });
   if(!hasAnything){
     lg('Nothing to export — activate instruments with patterns first');
@@ -3408,10 +3546,9 @@ function exportMIDI(){
           events.push({tick: barStart + dur - 1, type: 'off', note: m, vel: 0});
         });
       } else {
-        // Pattern-based — pick variant for this chord
-        const v = activeVariantAt(st, chordIdx);
-        const pat = v === 'B' ? (st.patB || []) : (st.pat || []);
-        const vel = v === 'B' ? (st.velB || []) : (st.vel || []);
+        // Pattern-based — pick slot for this chord (A/B or per-chord)
+        const slot = activeSlotAt(st, chordIdx);
+        const pat = slot.pat, vel = slot.vel;
         if(!pat || !pat.some(p => p && p.length)) continue;
 
         const shift = st.patRoot !== undefined ? (chordRoot(ch) - st.patRoot + 12) % 12 : 0;
