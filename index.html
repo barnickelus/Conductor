@@ -877,6 +877,166 @@ canvas#sbg{
   .tmid{gap: var(--s1)}
   .tb{padding: 6px 9px; font-size: var(--fs-xs)}
 }
+
+/* ═══════════════════════════════════════════════════════════
+   PROBABILITY MODE
+   ═══════════════════════════════════════════════════════════ */
+.tb#probBtn.active{
+  border-color: var(--v);
+  color: var(--v);
+  background: rgba(167,139,250,0.1);
+  box-shadow: 0 0 10px rgba(167,139,250,0.25);
+}
+/* Cells show probability as inner opacity — data-prob="50" etc */
+.sc.on[data-prob="75"]{ opacity: 0.82 }
+.sc.on[data-prob="50"]{ opacity: 0.62 }
+.sc.on[data-prob="25"]{ opacity: 0.38 }
+.nr.on[data-prob="75"]{ opacity: 0.82 }
+.nr.on[data-prob="50"]{ opacity: 0.62 }
+.nr.on[data-prob="25"]{ opacity: 0.38 }
+/* Probability dice indicator on cells with prob < 100 */
+.sc.on.lowprob::before{
+  content: attr(data-prob);
+  position: absolute;
+  top: 2px;
+  right: 3px;
+  font-family: 'JetBrains Mono',monospace;
+  font-size: 7px;
+  color: var(--v);
+  font-weight: 700;
+  pointer-events: none;
+  opacity: 0.85;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MODAL / LIBRARY
+   ═══════════════════════════════════════════════════════════ */
+.modal{
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: var(--s4);
+}
+.modal.open{display: flex; animation: fadeIn 0.2s ease}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.modal-bg{
+  position: absolute;
+  inset: 0;
+  background: rgba(3,5,9,0.82);
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+}
+.modal-panel{
+  position: relative;
+  background: var(--panel-hi);
+  border: 1px solid var(--border);
+  border-radius: var(--r3);
+  box-shadow: var(--shadow-panel);
+  max-width: 720px;
+  width: 100%;
+  max-height: 85vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  backdrop-filter: blur(20px);
+}
+.modal-hdr{
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--s3) var(--s4);
+  border-bottom: 1px solid var(--border);
+}
+.modal-title{
+  font-size: var(--fs-lg);
+  font-weight: 700;
+  color: var(--c);
+  letter-spacing: 0.05em;
+}
+.lib-sections{
+  overflow-y: auto;
+  padding: var(--s3) var(--s4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s4);
+}
+.lib-section-title{
+  font-family: 'JetBrains Mono',monospace;
+  font-size: var(--fs-xs);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--t-muted);
+  margin-bottom: var(--s2);
+  font-weight: 500;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.lib-save-btn{padding: 4px 10px; font-size: var(--fs-xs)}
+.lib-grid{
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: var(--s2);
+}
+.lib-card{
+  background: rgba(125,211,252,0.03);
+  border: 1px solid var(--border);
+  border-radius: var(--r2);
+  padding: var(--s3);
+  cursor: pointer;
+  transition: all 0.15s;
+  position: relative;
+  overflow: hidden;
+}
+.lib-card:hover{
+  border-color: var(--c);
+  background: rgba(0,229,255,0.08);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px rgba(0,229,255,0.15);
+}
+.lib-card-name{
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--t);
+  margin-bottom: 3px;
+}
+.lib-card-meta{
+  font-family: 'JetBrains Mono',monospace;
+  font-size: var(--fs-xs);
+  color: var(--t-muted);
+  letter-spacing: 0.05em;
+}
+.lib-card-desc{
+  font-size: var(--fs-xs);
+  color: var(--t-dim);
+  margin-top: var(--s1);
+  font-style: italic;
+  line-height: 1.4;
+}
+.lib-card .del-x{
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  font-size: 14px;
+  color: var(--t-faint);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 3px;
+  transition: 0.1s;
+}
+.lib-card .del-x:hover{color: var(--m); background: rgba(244,114,182,0.1)}
+.lib-empty{
+  grid-column: 1/-1;
+  padding: var(--s4);
+  text-align: center;
+  color: var(--t-faint);
+  font-family: 'JetBrains Mono',monospace;
+  font-size: var(--fs-sm);
+  font-style: italic;
+}
 </style>
 </head>
 <body>
@@ -893,6 +1053,7 @@ canvas#sbg{
       <button class="tb m" id="voiceB">🎤 Speak</button>
       <button class="tb m" onclick="saveSong()">💾 Save</button>
       <button class="tb m" onclick="document.getElementById('loadFile').click()">📂 Load</button>
+      <button class="tb m" onclick="showLibrary()">📚 Library</button>
       <input type="file" id="loadFile" accept=".json" style="display:none" onchange="loadSong(this)">
     </div>
     <div class="tr">
@@ -976,6 +1137,7 @@ canvas#sbg{
         <button onclick="randPat(selInst)">Regen</button>
         <button onclick="randChaos()">Chaos</button>
         <button onclick="humanize()">Humanize</button>
+        <button onclick="toggleProbMode()" id="probBtn">🎲 Prob</button>
         <button onclick="cloneInst()">Clone</button>
         <button id="delBtn" onclick="deleteInst()" style="display:none;color:var(--m);border-color:rgba(244,114,182,0.3)">Delete</button>
         <button onclick="deselect()">✕</button>
@@ -1001,6 +1163,30 @@ canvas#sbg{
     <div class="sg" id="sg"></div>
   </div></div>
   <div class="bspc"></div>
+</div>
+
+<!-- Library Modal -->
+<div class="modal" id="libraryModal">
+  <div class="modal-bg" onclick="hideLibrary()"></div>
+  <div class="modal-panel">
+    <div class="modal-hdr">
+      <div class="modal-title m">📚 Song Library</div>
+      <button class="tb m" onclick="hideLibrary()">✕</button>
+    </div>
+    <div class="lib-sections">
+      <div class="lib-section">
+        <div class="lib-section-title m">Built-in Presets</div>
+        <div class="lib-grid" id="builtinGrid"></div>
+      </div>
+      <div class="lib-section">
+        <div class="lib-section-title m">
+          Your Saves
+          <button class="tb m lib-save-btn" onclick="savePresetToLibrary()">+ Save Current</button>
+        </div>
+        <div class="lib-grid" id="customGrid"></div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -1221,10 +1407,12 @@ Object.entries(DEFS).forEach(([id, d]) => {
     pan: Math.sin(d.angle * Math.PI/180),
     vol: TV[d.tier], uVol: 1.0, sus: 0.5,
     pat: Array.from({length: ST}, () => []),
-    vel: Array(ST).fill(1.0), // velocity per step (1.0 = full, 0.5 = soft)
+    vel: Array(ST).fill(1.0),
+    prob: Array(ST).fill(1.0), // per-step probability (0-1)
     patB: Array.from({length: ST}, () => []),
     velB: Array(ST).fill(1.0),
-    variant: 'A', // 'A' or 'B' — which pattern is currently playing
+    probB: Array(ST).fill(1.0),
+    variant: 'A',
     usePat: false, patRoot: undefined,
     chordAllowed: [true, true, true, true],
     iFx: {rev: 0, del: 0}
@@ -1242,7 +1430,7 @@ const KEYS_DATA = {
 };
 
 let synths={}, panners={}, gains={}, sends={}, fx={}, analyser=null;
-let booted=false, cStep=0, selInst=null, cloneCount=0;
+let booted=false, cStep=0, selInst=null, cloneCount=0, probMode=false;
 let gKey='', apiSt='', autoProg=true;
 const GM = ['gemini-2.5-flash-preview-09-2025', 'gemini-2.0-flash'];
 let gMi = 0;
@@ -1300,6 +1488,7 @@ function randPat(id=selInst){
   const nr = d.cat==='rhythm' ? [] : patNotes(id);
   st.pat = Array.from({length: ST}, () => []);
   st.vel = Array(ST).fill(1.0);
+  st.prob = Array(ST).fill(1.0);
 
   for(let s=0; s<ST; s++){
     let hit = false, nArr = [];
@@ -1334,10 +1523,13 @@ function randChaos(id=selInst){
   const nr = d.cat==='rhythm' ? [] : patNotes(id);
   st.pat = Array.from({length: ST}, () => []);
   st.vel = Array(ST).fill(1.0);
+  st.prob = Array(ST).fill(1.0);
   for(let s=0; s<ST; s++){
     if(Math.random() > 0.68){
       st.pat[s] = d.cat==='rhythm' ? ['hit'] : [nr[Math.floor(Math.random()*nr.length)]];
       st.vel[s] = 0.5 + Math.random() * 0.5;
+      // Chaos gets a mix of probabilities for organic feel
+      if(Math.random() < 0.3) st.prob[s] = [0.5, 0.75, 0.75][Math.floor(Math.random()*3)];
     }
   }
   st.usePat = true;
@@ -1727,21 +1919,15 @@ function togC(i){
 function setVariant(v){
   if(!selInst) return;
   const st = E.inst[selInst];
-  // Save current editor state back into the right slot
-  // (Actually — pat/vel are live references, so swapping means reassigning)
   if(st.variant === v) return; // already here
-
-  // Swap: store current into the opposite slot, load the selected slot into live
-  if(st.variant === 'A'){
-    // Currently editing A, moving to B: swap pat↔patB
-    const tmpP = st.pat, tmpV = st.vel;
-    st.pat = st.patB; st.vel = st.velB;
-    st.patB = tmpP; st.velB = tmpV;
-  } else {
-    const tmpP = st.pat, tmpV = st.vel;
-    st.pat = st.patB; st.vel = st.velB;
-    st.patB = tmpP; st.velB = tmpV;
-  }
+  // Ensure both slots exist
+  if(!st.probB) st.probB = Array(ST).fill(1.0);
+  if(!st.patB) st.patB = Array.from({length:ST}, ()=>[]);
+  if(!st.velB) st.velB = Array(ST).fill(1.0);
+  // Swap live slot with stored slot (three-way swap)
+  const tmpP = st.pat, tmpV = st.vel, tmpR = st.prob;
+  st.pat = st.patB; st.vel = st.velB; st.prob = st.probB;
+  st.patB = tmpP; st.velB = tmpV; st.probB = tmpR;
   st.variant = v;
   document.getElementById('ab-A').classList.toggle('cur', v === 'A');
   document.getElementById('ab-B').classList.toggle('cur', v === 'B');
@@ -1754,6 +1940,7 @@ function copyVariant(){
   const st = E.inst[selInst];
   st.patB = st.pat.map(p => [...p]);
   st.velB = [...st.vel];
+  st.probB = [...(st.prob || Array(ST).fill(1.0))];
   lg('Copied ' + st.variant + ' → ' + (st.variant==='A'?'B':'A'));
 }
 
@@ -1812,27 +1999,38 @@ function openPat(id){
   for(let s=0; s<ST; s++){
     const cell = document.createElement('div');
     cell.className = 'sc';
+    // Ensure prob array exists and has a value
+    if(!st.prob) st.prob = Array(ST).fill(1.0);
+    if(st.prob[s] === undefined) st.prob[s] = 1.0;
 
     if(isR){
       if(st.pat[s].length){
         cell.classList.add('on');
         if(st.vel[s] >= 0.9) cell.classList.add('accent');
+        applyProb(cell, st.prob[s]);
       }
-      // Tap toggles; double-tap cycles velocity
+      // Tap handling — different when in probMode
       let tapTime = 0;
       cell.addEventListener('pointerdown', e => {
         e.preventDefault(); e.stopPropagation();
         const now = performance.now();
-        if(st.pat[s].length && (now - tapTime < 300)){
+        if(probMode){
+          // Prob mode: cycle probability on active cells
+          if(st.pat[s].length){
+            st.prob[s] = cycleProb(st.prob[s]);
+            applyProb(cell, st.prob[s]);
+          }
+        } else if(st.pat[s].length && (now - tapTime < 300)){
           // Double-tap: cycle accent
           st.vel[s] = st.vel[s] >= 0.9 ? 0.6 : 1.0;
           cell.classList.toggle('accent', st.vel[s] >= 0.9);
         } else {
           st.pat[s] = st.pat[s].length ? [] : ['hit'];
-          if(st.pat[s].length) st.vel[s] = 0.8;
+          if(st.pat[s].length){ st.vel[s] = 0.8; st.prob[s] = 1.0; }
           st.usePat = st.pat.some(p => p.length);
           cell.classList.toggle('on', st.pat[s].length > 0);
           cell.classList.remove('accent');
+          applyProb(cell, st.prob[s]);
         }
         tapTime = now;
       });
@@ -1842,21 +2040,31 @@ function openPat(id){
         const isOn = st.pat[s].includes(ns);
         row.className = 'nr' + (isOn ? ' on' : '') + (isOn && st.vel[s] >= 0.9 ? ' accent' : '');
         row.innerHTML = '<span class="nrl">' + ns + '</span>';
+        if(isOn) applyProb(row, st.prob[s]);
 
         let tapTime = 0;
         row.addEventListener('pointerdown', e => {
           e.preventDefault(); e.stopPropagation();
           const arr = st.pat[s], idx = arr.indexOf(ns), now = performance.now();
-          if(idx >= 0 && (now - tapTime < 300)){
-            // Double-tap: toggle accent
+          if(probMode){
+            if(idx >= 0){
+              st.prob[s] = cycleProb(st.prob[s]);
+              applyProb(row, st.prob[s]);
+            }
+          } else if(idx >= 0 && (now - tapTime < 300)){
             st.vel[s] = st.vel[s] >= 0.9 ? 0.6 : 1.0;
             row.classList.toggle('accent', st.vel[s] >= 0.9);
           } else {
             if(idx >= 0) arr.splice(idx, 1);
-            else { arr.push(ns); if(st.vel[s] === undefined) st.vel[s] = 0.8; }
+            else {
+              arr.push(ns);
+              if(st.vel[s] === undefined) st.vel[s] = 0.8;
+              if(st.prob[s] === undefined) st.prob[s] = 1.0;
+            }
             row.classList.toggle('on', arr.includes(ns));
             st.usePat = st.pat.some(p => p.length);
             if(st.usePat && st.patRoot === undefined) st.patRoot = chordRoot(E.chords[E.ci]);
+            if(arr.includes(ns)) applyProb(row, st.prob[s]);
           }
           tapTime = now;
         });
@@ -1865,6 +2073,30 @@ function openPat(id){
     }
     g.appendChild(cell);
   }
+}
+
+// Probability helpers
+function cycleProb(p){
+  // 1.0 → 0.75 → 0.5 → 0.25 → 1.0
+  if(p >= 0.95) return 0.75;
+  if(p >= 0.7) return 0.5;
+  if(p >= 0.45) return 0.25;
+  return 1.0;
+}
+function applyProb(el, p){
+  const pct = Math.round(p * 100);
+  if(pct >= 100){
+    el.removeAttribute('data-prob');
+    el.classList.remove('lowprob');
+  } else {
+    el.setAttribute('data-prob', String(pct));
+    el.classList.add('lowprob');
+  }
+}
+function toggleProbMode(){
+  probMode = !probMode;
+  document.getElementById('probBtn').classList.toggle('active', probMode);
+  lg(probMode ? 'Prob mode — tap steps to set chance' : 'Prob mode off');
 }
 
 function upPlayhead(){
@@ -1880,6 +2112,7 @@ function clearPat(){
   if(!selInst) return;
   E.inst[selInst].pat = Array.from({length: ST}, () => []);
   E.inst[selInst].vel = Array(ST).fill(1.0);
+  E.inst[selInst].prob = Array(ST).fill(1.0);
   E.inst[selInst].usePat = false;
   E.inst[selInst].patRoot = undefined;
   openPat(selInst);
@@ -2039,6 +2272,9 @@ async function boot(){
       if(!d || d.cat === 'atmo') return;
       if(st.usePat && st.pat.some(p => p.length)){
         const vals = st.pat[s16]; if(!vals.length) return;
+        // Per-step probability gate
+        const stepProb = (st.prob && st.prob[s16] !== undefined) ? st.prob[s16] : 1.0;
+        if(stepProb < 1.0 && Math.random() > stepProb) return;
         const stepVel = st.vel[s16] || 0.8;
         playPatStep(id, d, ch, vals, playTime, e, stepVel);
       }
@@ -2449,8 +2685,9 @@ function saveSong(){
     song.instruments[id] = {
       on: st.on, angle: st.angle, tier: st.tier,
       uVol: st.uVol, sus: st.sus,
-      pat: st.pat, vel: st.vel,
-      patB: st.patB, velB: st.velB, variant: st.variant,
+      pat: st.pat, vel: st.vel, prob: st.prob,
+      patB: st.patB, velB: st.velB, probB: st.probB,
+      variant: st.variant,
       usePat: st.usePat, patRoot: st.patRoot,
       chordAllowed: st.chordAllowed,
       iFx: st.iFx,
@@ -2534,15 +2771,19 @@ function applySong(song){
         else if(k === 'tier'){ st.tier = v; st.vol = TV[v]; }
         else if(k === 'pat' && Array.isArray(v)) st.pat = v.map(p => Array.isArray(p) ? [...p] : []);
         else if(k === 'vel' && Array.isArray(v)) st.vel = [...v];
+        else if(k === 'prob' && Array.isArray(v)) st.prob = [...v];
         else if(k === 'patB' && Array.isArray(v)) st.patB = v.map(p => Array.isArray(p) ? [...p] : []);
         else if(k === 'velB' && Array.isArray(v)) st.velB = [...v];
+        else if(k === 'probB' && Array.isArray(v)) st.probB = [...v];
         else if(k === 'chordAllowed' && Array.isArray(v)) st.chordAllowed = [...v];
         else if(k === 'iFx' && v) st.iFx = {...v};
         else if(v !== undefined) st[k] = v;
       });
-      // Ensure variant fields exist for legacy saves
+      // Ensure fields exist for legacy saves
       if(!st.patB) st.patB = Array.from({length:ST}, ()=>[]);
       if(!st.velB) st.velB = Array(ST).fill(1.0);
+      if(!st.prob) st.prob = Array(ST).fill(1.0);
+      if(!st.probB) st.probB = Array(ST).fill(1.0);
       if(!st.variant) st.variant = 'A';
       if(booted){
         if(gains[id]) gains[id].gain.rampTo(st.vol * st.uVol, 0.1);
@@ -2566,6 +2807,289 @@ function applySong(song){
   buildStage(); upUI(); renderChords();
   if(selInst) openPat(selInst);
 }
+
+// ═══════════════════════════════════════════════════════════
+// PRESET LIBRARY (built-in + localStorage)
+// ═══════════════════════════════════════════════════════════
+// Helper to build a compact preset. Only the fields that differ from defaults get stored;
+// the rest are filled in from DEFS at load time.
+function buildPreset(meta, setup){
+  return {
+    version: 17, name: meta.name, description: meta.description,
+    tempo: meta.tempo, energy: meta.energy, key: meta.key, mode: meta.mode,
+    filterCutoff: 3500, autoProg: true, swing: meta.swing || 0,
+    chords: meta.chords || (KEYS_DATA[meta.key]?.[meta.mode]),
+    instruments: setup
+  };
+}
+
+// Pattern shorthand: 'x' = hit, '.' = rest — auto-applies default velocity
+function rh(str){
+  return str.split('').map(c => c === 'x' ? ['hit'] : []);
+}
+function velAccents(str){
+  return str.split('').map(c => c === 'X' ? 1.0 : c === 'x' ? 0.7 : 1.0);
+}
+
+const BUILTIN_PRESETS = [
+  buildPreset(
+    {name:'Dark Cinematic', description:'Slow, brooding. Strings + sub bass in C minor.',
+     tempo:82, energy:0.55, key:'C', mode:'minor'},
+    {
+      kick:    {on:true, pat:rh('x..x..x.x..x..x.'), vel:velAccents('X..x..x.X..x..x.')},
+      snare:   {on:true, pat:rh('....x.......x...'), vel:velAccents('....X.......X...')},
+      hihat:   {on:false},
+      synbass: {on:false},
+      subbass: {on:true, uVol:0.9},
+      cello:   {on:true, uVol:0.85},
+      strings: {on:true, uVol:0.7},
+      pad:     {on:true, uVol:0.6},
+      lead:    {on:false}
+    }
+  ),
+  buildPreset(
+    {name:'Dance Hype', description:'Driving 4-on-the-floor. Arp + clap + synbass.',
+     tempo:128, energy:0.9, key:'A', mode:'minor'},
+    {
+      kick:    {on:true, pat:rh('x...x...x...x...')},
+      snare:   {on:true, pat:rh('....x.......x...')},
+      hihat:   {on:true, pat:rh('x.x.x.x.x.x.x.x.'), prob:[1,0.7,1,0.7,1,0.7,1,0.7,1,0.7,1,0.7,1,0.7,1,0.7]},
+      clap:    {on:true, pat:rh('....x.......x...')},
+      synbass: {on:true, uVol:0.85},
+      arp:     {on:true, uVol:0.6},
+      lead:    {on:false}
+    }
+  ),
+  buildPreset(
+    {name:'Ambient Dream', description:'Floating pads, bells, no drums. In F major.',
+     tempo:72, energy:0.3, key:'F', mode:'major'},
+    {
+      kick:{on:false}, snare:{on:false}, hihat:{on:false}, synbass:{on:false}, lead:{on:false},
+      pad:     {on:true, uVol:0.75},
+      strings: {on:true, uVol:0.55},
+      choir:   {on:true, uVol:0.65},
+      bell:    {on:true, uVol:0.5},
+      texture: {on:true, uVol:0.5}
+    }
+  ),
+  buildPreset(
+    {name:'Minimal Techno', description:'Sparse, probabilistic, hypnotic. G minor, 124 bpm.',
+     tempo:124, energy:0.7, key:'G', mode:'minor', swing:0.04},
+    {
+      kick:    {on:true, pat:rh('x...x...x...x...')},
+      snare:   {on:false},
+      hihat:   {on:true, pat:rh('..x...x...x...x.'), prob:[1,1,0.7,1,1,1,0.6,1,1,1,0.7,1,1,1,0.6,1]},
+      clap:    {on:true, pat:rh('....x.......x...')},
+      perc:    {on:true, pat:rh('..x.....x....x..'), prob:[1,1,0.5,1,1,1,1,1,0.5,1,1,1,1,0.5,1,1]},
+      synbass: {on:true, uVol:0.85, pat:rh('x.......x.......')},
+      pad:     {on:true, uVol:0.4},
+      lead:    {on:false}
+    }
+  ),
+  buildPreset(
+    {name:'Lofi Chill', description:'Dusty drums, soft keys, swung 16ths.',
+     tempo:78, energy:0.4, key:'D', mode:'minor', swing:0.15},
+    {
+      kick:    {on:true, pat:rh('x.....x...x...x.')},
+      snare:   {on:true, pat:rh('....x.......x...')},
+      hihat:   {on:true, pat:rh('x.x.x.x.x.x.x.x.'), prob:[1,0.5,1,0.5,1,0.5,1,0.5,1,0.5,1,0.5,1,0.5,1,0.5]},
+      synbass: {on:false},
+      subbass: {on:true, uVol:0.7},
+      keys:    {on:true, uVol:0.75},
+      pad:     {on:true, uVol:0.45},
+      lead:    {on:false}
+    }
+  ),
+  buildPreset(
+    {name:'Epic Trailer', description:'Big cinematic build. Choir, strings, drums, cello.',
+     tempo:96, energy:0.85, key:'E', mode:'minor'},
+    {
+      kick:    {on:true, pat:rh('x...x...x..xx..x'), vel:velAccents('X...X...X..xX..x')},
+      snare:   {on:true, pat:rh('....x.......x...')},
+      hihat:   {on:true, pat:rh('x.x.x.x.x.x.x.x.')},
+      clap:    {on:true, pat:rh('........x.......')},
+      perc:    {on:true, uVol:0.7},
+      subbass: {on:true, uVol:0.9},
+      cello:   {on:true, uVol:0.85},
+      violin:  {on:true, uVol:0.75},
+      strings: {on:true, uVol:0.7},
+      choir:   {on:true, uVol:0.7}
+    }
+  ),
+];
+
+function expandPreset(preset){
+  // Expand compact preset into full instrument state by merging with defaults
+  const full = JSON.parse(JSON.stringify(preset)); // clone
+  const filled = {};
+  Object.entries(DEFS).forEach(([id, d]) => {
+    if(id.includes('_')) return; // skip clones
+    const given = full.instruments[id] || {};
+    filled[id] = {
+      on: given.on !== undefined ? given.on : d.defOn,
+      angle: given.angle !== undefined ? given.angle : d.angle,
+      tier: given.tier !== undefined ? given.tier : d.tier,
+      uVol: given.uVol !== undefined ? given.uVol : 1.0,
+      sus: given.sus !== undefined ? given.sus : 0.5,
+      pat: Array.isArray(given.pat) ? given.pat : Array.from({length:ST}, ()=>[]),
+      vel: Array.isArray(given.vel) ? given.vel : Array(ST).fill(1.0),
+      prob: Array.isArray(given.prob) ? given.prob : Array(ST).fill(1.0),
+      patB: given.patB || Array.from({length:ST}, ()=>[]),
+      velB: given.velB || Array(ST).fill(1.0),
+      probB: given.probB || Array(ST).fill(1.0),
+      variant: given.variant || 'A',
+      usePat: given.usePat !== undefined ? given.usePat : (Array.isArray(given.pat) && given.pat.some(p => p && p.length)),
+      patRoot: given.patRoot,
+      chordAllowed: given.chordAllowed || [true,true,true,true],
+      iFx: given.iFx || {rev:0, del:0}
+    };
+  });
+  full.instruments = filled;
+  return full;
+}
+
+// Custom preset storage via localStorage
+const CUSTOM_KEY = 'conductive_v17_presets';
+function getCustomPresets(){
+  try { return JSON.parse(localStorage.getItem(CUSTOM_KEY) || '[]'); }
+  catch(e){ return []; }
+}
+function setCustomPresets(arr){
+  try { localStorage.setItem(CUSTOM_KEY, JSON.stringify(arr)); }
+  catch(e){ lg('Storage full'); }
+}
+
+function showLibrary(){
+  renderLibraryCards();
+  document.getElementById('libraryModal').classList.add('open');
+}
+function hideLibrary(){
+  document.getElementById('libraryModal').classList.remove('open');
+}
+
+function renderLibraryCards(){
+  const builtin = document.getElementById('builtinGrid');
+  const custom = document.getElementById('customGrid');
+  builtin.innerHTML = '';
+  custom.innerHTML = '';
+
+  BUILTIN_PRESETS.forEach((preset, i) => {
+    builtin.appendChild(makeCard(preset, () => loadBuiltinPreset(i)));
+  });
+
+  const saved = getCustomPresets();
+  if(saved.length === 0){
+    custom.innerHTML = '<div class="lib-empty">No saved presets yet. Build something, then tap "+ Save Current".</div>';
+  } else {
+    saved.forEach((preset, i) => {
+      const card = makeCard(preset, () => loadCustomPreset(i));
+      const del = document.createElement('div');
+      del.className = 'del-x';
+      del.textContent = '✕';
+      del.addEventListener('click', e => { e.stopPropagation(); deleteCustomPreset(i); });
+      card.appendChild(del);
+      custom.appendChild(card);
+    });
+  }
+}
+
+function makeCard(preset, onClick){
+  const card = document.createElement('div');
+  card.className = 'lib-card';
+  const meta = preset.tempo + ' BPM · ' + preset.key + (preset.mode==='minor'?'m':'');
+  card.innerHTML =
+    '<div class="lib-card-name">' + (preset.name || 'Untitled') + '</div>' +
+    '<div class="lib-card-meta m">' + meta + '</div>' +
+    (preset.description ? '<div class="lib-card-desc">' + preset.description + '</div>' : '');
+  card.addEventListener('click', onClick);
+  return card;
+}
+
+function loadBuiltinPreset(i){
+  const preset = expandPreset(BUILTIN_PRESETS[i]);
+  applyPresetWithClear(preset);
+  hideLibrary();
+  lg('Loaded preset: ' + preset.name);
+}
+
+function loadCustomPreset(i){
+  const saved = getCustomPresets();
+  if(!saved[i]) return;
+  applyPresetWithClear(saved[i]);
+  hideLibrary();
+  lg('Loaded: ' + saved[i].name);
+}
+
+function applyPresetWithClear(preset){
+  // Remove any existing clones first — they're not in the preset
+  Object.keys(E.inst).forEach(id => {
+    if(id.includes('_')){
+      try {
+        if(synths[id]) synths[id].disconnect();
+        if(gains[id]) gains[id].disconnect();
+        if(panners[id]) panners[id].disconnect();
+        if(sends[id]){ sends[id].rev.disconnect(); sends[id].del.disconnect(); }
+        if(VIBRATO[id]) VIBRATO[id].disconnect();
+      } catch(e){}
+      delete synths[id]; delete gains[id]; delete panners[id];
+      delete sends[id]; delete VIBRATO[id];
+      delete DEFS[id]; delete E.inst[id];
+    }
+  });
+  cloneCount = 0;
+  applySong(preset);
+}
+
+function savePresetToLibrary(){
+  const name = prompt('Preset name:', 'My preset');
+  if(!name) return;
+  const description = prompt('Short description (optional):', '') || '';
+
+  const preset = {
+    version: 17, name, description,
+    tempo: E.tempo, energy: E.energy, key: E.key, mode: E.mode,
+    filterCutoff: E.fc, autoProg, swing: E.swing,
+    chords: E.chords,
+    instruments: {}
+  };
+  Object.entries(E.inst).forEach(([id, st]) => {
+    const base = id.split('_')[0];
+    preset.instruments[id] = {
+      on: st.on, angle: st.angle, tier: st.tier,
+      uVol: st.uVol, sus: st.sus,
+      pat: st.pat, vel: st.vel, prob: st.prob,
+      patB: st.patB, velB: st.velB, probB: st.probB,
+      variant: st.variant,
+      usePat: st.usePat, patRoot: st.patRoot,
+      chordAllowed: st.chordAllowed, iFx: st.iFx,
+      isClone: !FACTORY[id], cloneBase: base
+    };
+  });
+
+  const saved = getCustomPresets();
+  saved.unshift(preset); // newest first
+  // Cap at 20 to avoid quota issues
+  if(saved.length > 20) saved.length = 20;
+  setCustomPresets(saved);
+  renderLibraryCards();
+  lg('Saved to library: ' + name);
+}
+
+function deleteCustomPreset(i){
+  const saved = getCustomPresets();
+  if(!saved[i]) return;
+  if(!confirm('Delete preset "' + saved[i].name + '"?')) return;
+  saved.splice(i, 1);
+  setCustomPresets(saved);
+  renderLibraryCards();
+}
+
+// Close library on Escape
+document.addEventListener('keydown', e => {
+  if(e.key === 'Escape' && document.getElementById('libraryModal').classList.contains('open')){
+    hideLibrary();
+  }
+});
 
 // ═══════════════════════════════════════════════════════════
 // INITIAL RENDER
