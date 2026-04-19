@@ -733,6 +733,78 @@ canvas#sbg{
 }
 .absync:hover{color: var(--v); transform: rotate(180deg)}
 
+.ablink{
+  font-size: 13px;
+  color: var(--t-muted);
+  cursor: pointer;
+  padding: 2px 5px;
+  border-radius: 3px;
+  transition: 0.12s;
+  user-select: none;
+  border: 1px solid transparent;
+}
+.ablink:hover{color: var(--v)}
+.ablink.active{
+  color: var(--v);
+  border-color: rgba(167,139,250,0.4);
+  background: rgba(167,139,250,0.12);
+  box-shadow: 0 0 6px rgba(167,139,250,0.3);
+}
+
+/* Variant row — per-chord mapping pills */
+.variant-row{
+  display: flex;
+  gap: var(--s1);
+  align-items: center;
+  margin-bottom: var(--s2);
+  padding: 5px 10px;
+  border-radius: var(--r1);
+  background: rgba(167,139,250,0.04);
+  border: 1px solid rgba(167,139,250,0.15);
+}
+.variant-row label{
+  font-family: 'JetBrains Mono',monospace;
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--t-muted);
+  margin-right: var(--s1);
+  font-weight: 500;
+}
+.vmap-pill{
+  padding: 3px 8px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  font-family: 'JetBrains Mono',monospace;
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  cursor: pointer;
+  transition: 0.12s;
+  min-width: 28px;
+  text-align: center;
+}
+.vmap-pill.varA{
+  color: var(--c);
+  border-color: rgba(0,229,255,0.3);
+  background: rgba(0,229,255,0.06);
+}
+.vmap-pill.varB{
+  color: var(--v);
+  border-color: rgba(167,139,250,0.4);
+  background: rgba(167,139,250,0.1);
+}
+.vmap-pill:hover{transform: scale(1.08)}
+.vmap-hint{
+  font-family: 'JetBrains Mono',monospace;
+  font-size: var(--fs-xs);
+  color: var(--t-faint);
+  font-style: italic;
+  margin-left: var(--s2);
+}
+@media(max-width:700px){
+  .vmap-hint{display:none}
+}
+
 .pact{display: flex; gap: var(--s1)}
 .pact button{
   background: rgba(0,229,255,0.02);
@@ -1054,6 +1126,7 @@ canvas#sbg{
       <button class="tb m" onclick="saveSong()">💾 Save</button>
       <button class="tb m" onclick="document.getElementById('loadFile').click()">📂 Load</button>
       <button class="tb m" onclick="showLibrary()">📚 Library</button>
+      <button class="tb m" onclick="exportMIDI()">🎵 MIDI</button>
       <input type="file" id="loadFile" accept=".json" style="display:none" onchange="loadSong(this)">
     </div>
     <div class="tr">
@@ -1130,7 +1203,8 @@ canvas#sbg{
         <label>Var</label>
         <div class="abtog cur" id="ab-A" onclick="setVariant('A')">A</div>
         <div class="abtog" id="ab-B" onclick="setVariant('B')">B</div>
-        <div class="absync" onclick="copyVariant()" title="Copy A→B">⇔</div>
+        <div class="absync" onclick="copyVariant()" title="Copy current variant to the other slot">⇔</div>
+        <div class="ablink" id="linkBtn" onclick="toggleVariantAuto()" title="Auto: variant follows chord">🔗</div>
       </div>
       <div class="pact m">
         <button onclick="clearPat()">Clear</button>
@@ -1142,6 +1216,15 @@ canvas#sbg{
         <button id="delBtn" onclick="deleteInst()" style="display:none;color:var(--m);border-color:rgba(244,114,182,0.3)">Delete</button>
         <button onclick="deselect()">✕</button>
       </div>
+    </div>
+    <div class="variant-row m" id="variantRow" style="display:none">
+      <label>Per Chord →</label>
+      <div class="vmap-pill m varA" id="vmap-0" onclick="cycleVariantForChord(0)">1A</div>
+      <div class="vmap-pill m varA" id="vmap-1" onclick="cycleVariantForChord(1)">2A</div>
+      <div class="vmap-pill m varB" id="vmap-2" onclick="cycleVariantForChord(2)">3B</div>
+      <div class="vmap-pill m varB" id="vmap-3" onclick="cycleVariantForChord(3)">4B</div>
+      <div class="vmap-hint m">tap to flip · sequencer uses this mapping</div>
+    </div>
     </div>
     <div class="pfx m">
       <div class="sl"><label>Vol</label><input type="range" min="0" max="100" value="100" id="iVol" oninput="setIVol(this.value)"></div>
@@ -1408,11 +1491,13 @@ Object.entries(DEFS).forEach(([id, d]) => {
     vol: TV[d.tier], uVol: 1.0, sus: 0.5,
     pat: Array.from({length: ST}, () => []),
     vel: Array(ST).fill(1.0),
-    prob: Array(ST).fill(1.0), // per-step probability (0-1)
+    prob: Array(ST).fill(1.0),
     patB: Array.from({length: ST}, () => []),
     velB: Array(ST).fill(1.0),
     probB: Array(ST).fill(1.0),
-    variant: 'A',
+    variant: 'A',         // which variant the editor shows
+    variantAuto: false,   // if true, sequencer uses variantMap per chord
+    variantMap: ['A','A','B','B'], // per-chord variant mapping
     usePat: false, patRoot: undefined,
     chordAllowed: [true, true, true, true],
     iFx: {rev: 0, del: 0}
@@ -1486,9 +1571,9 @@ function randPat(id=selInst){
   if(!id) return;
   const base = id.split('_')[0], d = DEFS[base], st = E.inst[id], e = E.energy;
   const nr = d.cat==='rhythm' ? [] : patNotes(id);
-  st.pat = Array.from({length: ST}, () => []);
-  st.vel = Array(ST).fill(1.0);
-  st.prob = Array(ST).fill(1.0);
+  const pat = Array.from({length: ST}, () => []);
+  const vel = Array(ST).fill(1.0);
+  const prob = Array(ST).fill(1.0);
 
   for(let s=0; s<ST; s++){
     let hit = false, nArr = [];
@@ -1498,20 +1583,21 @@ function randPat(id=selInst){
       if(base === 'hihat' && s%2===0) hit = true;
       if(base === 'clap'  && s%16===4) hit = true;
       if(base === 'perc'  && s%4===2 && Math.random()<e) hit = true;
-      if(hit){ st.pat[s] = ['hit']; st.vel[s] = (s%8===0) ? 1.0 : 0.7; }
+      if(hit){ pat[s] = ['hit']; vel[s] = (s%8===0) ? 1.0 : 0.7; }
     } else {
-      if(d.cat === 'bass' && s%8===0){ nArr = [nr[7]]; st.vel[s] = 1.0; }
+      if(d.cat === 'bass' && s%8===0){ nArr = [nr[7]]; vel[s] = 1.0; }
       else if(d.cat === 'melodic' && s%4===0 && Math.random() < e+0.3){
         nArr = [nr[Math.floor(Math.random()*4)]];
-        st.vel[s] = (s%8===0) ? 1.0 : 0.75;
+        vel[s] = (s%8===0) ? 1.0 : 0.75;
       }
       else if(base === 'keys' && s%4===0){
         nArr = [nr[7], nr[5], nr[3]].filter(Boolean);
-        st.vel[s] = 0.8;
+        vel[s] = 0.8;
       }
-      if(nArr.length) st.pat[s] = nArr;
+      if(nArr.length) pat[s] = nArr;
     }
   }
+  setLiveSlot(st, pat, vel, prob);
   st.usePat = true;
   st.patRoot = chordRoot(E.chords[E.ci]);
   if(selInst === id) openPat(id);
@@ -1521,17 +1607,17 @@ function randChaos(id=selInst){
   if(!id) return;
   const base = id.split('_')[0], d = DEFS[base], st = E.inst[id];
   const nr = d.cat==='rhythm' ? [] : patNotes(id);
-  st.pat = Array.from({length: ST}, () => []);
-  st.vel = Array(ST).fill(1.0);
-  st.prob = Array(ST).fill(1.0);
+  const pat = Array.from({length: ST}, () => []);
+  const vel = Array(ST).fill(1.0);
+  const prob = Array(ST).fill(1.0);
   for(let s=0; s<ST; s++){
     if(Math.random() > 0.68){
-      st.pat[s] = d.cat==='rhythm' ? ['hit'] : [nr[Math.floor(Math.random()*nr.length)]];
-      st.vel[s] = 0.5 + Math.random() * 0.5;
-      // Chaos gets a mix of probabilities for organic feel
-      if(Math.random() < 0.3) st.prob[s] = [0.5, 0.75, 0.75][Math.floor(Math.random()*3)];
+      pat[s] = d.cat==='rhythm' ? ['hit'] : [nr[Math.floor(Math.random()*nr.length)]];
+      vel[s] = 0.5 + Math.random() * 0.5;
+      if(Math.random() < 0.3) prob[s] = [0.5, 0.75, 0.75][Math.floor(Math.random()*3)];
     }
   }
+  setLiveSlot(st, pat, vel, prob);
   st.usePat = true;
   st.patRoot = chordRoot(E.chords[E.ci]);
   if(selInst === id) openPat(id);
@@ -1818,6 +1904,13 @@ function cloneInst(){
     sus: st.sus,
     pat: st.pat.map(p => [...p]),
     vel: [...st.vel],
+    prob: [...(st.prob || Array(ST).fill(1.0))],
+    patB: (st.patB || []).map(p => [...p]),
+    velB: [...(st.velB || Array(ST).fill(1.0))],
+    probB: [...(st.probB || Array(ST).fill(1.0))],
+    variant: st.variant || 'A',
+    variantAuto: !!st.variantAuto,
+    variantMap: [...(st.variantMap || ['A','A','B','B'])],
     usePat: st.usePat,
     patRoot: st.patRoot,
     chordAllowed: [...st.chordAllowed],
@@ -1915,48 +2008,111 @@ function togC(i){
   upCT();
 }
 
-// A/B Variant management
+// ═══════════════════════════════════════════════════════════
+// VARIANT SLOTS — non-destructive, supports chord-linked mode
+// pat/vel/prob always store A. patB/velB/probB always store B.
+// st.variant = which one the EDITOR shows.
+// st.variantAuto = sequencer uses variantMap instead of variant.
+// ═══════════════════════════════════════════════════════════
+function liveSlot(st, which){
+  const v = which || st.variant;
+  return v === 'B'
+    ? {pat: st.patB, vel: st.velB, prob: st.probB}
+    : {pat: st.pat, vel: st.vel, prob: st.prob};
+}
+function setLiveSlot(st, pat, vel, prob){
+  if(st.variant === 'B'){
+    st.patB = pat; st.velB = vel; st.probB = prob;
+  } else {
+    st.pat = pat; st.vel = vel; st.prob = prob;
+  }
+}
+// Which variant should play at the current chord
+function activeVariantAt(st, chordIdx){
+  if(st.variantAuto) return (st.variantMap && st.variantMap[chordIdx]) || 'A';
+  return st.variant;
+}
+
+// A/B Variant management (non-destructive — just switches the editor view)
 function setVariant(v){
   if(!selInst) return;
   const st = E.inst[selInst];
-  if(st.variant === v) return; // already here
-  // Ensure both slots exist
-  if(!st.probB) st.probB = Array(ST).fill(1.0);
+  if(st.variant === v) return;
+  // Ensure B slot exists
   if(!st.patB) st.patB = Array.from({length:ST}, ()=>[]);
   if(!st.velB) st.velB = Array(ST).fill(1.0);
-  // Swap live slot with stored slot (three-way swap)
-  const tmpP = st.pat, tmpV = st.vel, tmpR = st.prob;
-  st.pat = st.patB; st.vel = st.velB; st.prob = st.probB;
-  st.patB = tmpP; st.velB = tmpV; st.probB = tmpR;
+  if(!st.probB) st.probB = Array(ST).fill(1.0);
   st.variant = v;
   document.getElementById('ab-A').classList.toggle('cur', v === 'A');
   document.getElementById('ab-B').classList.toggle('cur', v === 'B');
   openPat(selInst);
-  lg('Variant ' + v);
+  lg('Editing variant ' + v);
 }
 
 function copyVariant(){
   if(!selInst) return;
   const st = E.inst[selInst];
-  st.patB = st.pat.map(p => [...p]);
-  st.velB = [...st.vel];
-  st.probB = [...(st.prob || Array(ST).fill(1.0))];
-  lg('Copied ' + st.variant + ' → ' + (st.variant==='A'?'B':'A'));
+  // Copy the variant currently being edited into the other slot
+  if(st.variant === 'A'){
+    st.patB = st.pat.map(p => [...p]);
+    st.velB = [...st.vel];
+    st.probB = [...(st.prob || Array(ST).fill(1.0))];
+    lg('Copied A → B');
+  } else {
+    st.pat = st.patB.map(p => [...p]);
+    st.vel = [...st.velB];
+    st.prob = [...(st.probB || Array(ST).fill(1.0))];
+    lg('Copied B → A');
+  }
+}
+
+// Toggle chord→variant auto-mapping
+function toggleVariantAuto(){
+  if(!selInst) return;
+  const st = E.inst[selInst];
+  st.variantAuto = !st.variantAuto;
+  if(!st.variantMap) st.variantMap = ['A','A','B','B'];
+  document.getElementById('linkBtn').classList.toggle('active', st.variantAuto);
+  document.getElementById('variantRow').style.display = st.variantAuto ? 'flex' : 'none';
+  renderVariantRow();
+  lg(st.variantAuto ? 'Auto: variant follows chord' : 'Auto off — manual A/B');
+}
+
+function renderVariantRow(){
+  if(!selInst) return;
+  const st = E.inst[selInst];
+  if(!st.variantMap) st.variantMap = ['A','A','B','B'];
+  for(let i=0; i<4; i++){
+    const el = document.getElementById('vmap-' + i);
+    if(el){
+      const v = st.variantMap[i] || 'A';
+      el.textContent = (i+1) + v;
+      el.className = 'vmap-pill m ' + (v === 'B' ? 'varB' : 'varA');
+    }
+  }
+}
+
+function cycleVariantForChord(i){
+  if(!selInst) return;
+  const st = E.inst[selInst];
+  if(!st.variantMap) st.variantMap = ['A','A','B','B'];
+  st.variantMap[i] = st.variantMap[i] === 'A' ? 'B' : 'A';
+  renderVariantRow();
 }
 
 // Humanize: subtly vary velocities for a less robotic feel
 function humanize(){
   if(!selInst) return;
   const st = E.inst[selInst];
+  const slot = liveSlot(st);
   for(let s=0; s<ST; s++){
-    if(st.pat[s].length){
-      // Variance: ±0.15 around current velocity, clamped
+    if(slot.pat[s].length){
       const jitter = (Math.random() - 0.5) * 0.3;
-      st.vel[s] = Math.max(0.35, Math.min(1.0, st.vel[s] + jitter));
+      slot.vel[s] = Math.max(0.35, Math.min(1.0, slot.vel[s] + jitter));
     }
   }
   openPat(selInst);
-  lg('Humanized');
+  lg('Humanized variant ' + st.variant);
 }
 
 function upCT(){
@@ -1971,7 +2127,8 @@ function upCT(){
 }
 
 // ═══════════════════════════════════════════════════════════
-// PATTERN EDITOR (with velocity support)
+// PATTERN EDITOR (with velocity + probability support)
+// Reads/writes through liveSlot(st) — active variant slot.
 // ═══════════════════════════════════════════════════════════
 function openPat(id){
   const base = id.split('_')[0], d = DEFS[base], st = E.inst[id];
@@ -1989,6 +2146,9 @@ function openPat(id){
   document.getElementById('delBtn').style.display = id.includes('_') ? '' : 'none';
   document.getElementById('ab-A').classList.toggle('cur', st.variant === 'A');
   document.getElementById('ab-B').classList.toggle('cur', st.variant === 'B');
+  document.getElementById('linkBtn').classList.toggle('active', !!st.variantAuto);
+  document.getElementById('variantRow').style.display = st.variantAuto ? 'flex' : 'none';
+  if(st.variantAuto) renderVariantRow();
   upCT();
 
   const g = document.getElementById('sg'), isR = d.cat === 'rhythm';
@@ -1996,75 +2156,80 @@ function openPat(id){
   g.className = 'sg ' + (isR ? 'rh' : 'mel');
   const notes = isR ? [] : patNotes(id);
 
+  // Ensure both slots exist
+  if(!st.patB) st.patB = Array.from({length:ST}, ()=>[]);
+  if(!st.velB) st.velB = Array(ST).fill(1.0);
+  if(!st.probB) st.probB = Array(ST).fill(1.0);
+  if(!st.prob) st.prob = Array(ST).fill(1.0);
+
+  // Editor reads/writes the active slot
+  const slot = liveSlot(st);
+
   for(let s=0; s<ST; s++){
     const cell = document.createElement('div');
     cell.className = 'sc';
-    // Ensure prob array exists and has a value
-    if(!st.prob) st.prob = Array(ST).fill(1.0);
-    if(st.prob[s] === undefined) st.prob[s] = 1.0;
+    if(slot.prob[s] === undefined) slot.prob[s] = 1.0;
 
     if(isR){
-      if(st.pat[s].length){
+      if(slot.pat[s].length){
         cell.classList.add('on');
-        if(st.vel[s] >= 0.9) cell.classList.add('accent');
-        applyProb(cell, st.prob[s]);
+        if(slot.vel[s] >= 0.9) cell.classList.add('accent');
+        applyProb(cell, slot.prob[s]);
       }
-      // Tap handling — different when in probMode
       let tapTime = 0;
       cell.addEventListener('pointerdown', e => {
         e.preventDefault(); e.stopPropagation();
         const now = performance.now();
         if(probMode){
-          // Prob mode: cycle probability on active cells
-          if(st.pat[s].length){
-            st.prob[s] = cycleProb(st.prob[s]);
-            applyProb(cell, st.prob[s]);
+          if(slot.pat[s].length){
+            slot.prob[s] = cycleProb(slot.prob[s]);
+            applyProb(cell, slot.prob[s]);
           }
-        } else if(st.pat[s].length && (now - tapTime < 300)){
-          // Double-tap: cycle accent
-          st.vel[s] = st.vel[s] >= 0.9 ? 0.6 : 1.0;
-          cell.classList.toggle('accent', st.vel[s] >= 0.9);
+        } else if(slot.pat[s].length && (now - tapTime < 300)){
+          slot.vel[s] = slot.vel[s] >= 0.9 ? 0.6 : 1.0;
+          cell.classList.toggle('accent', slot.vel[s] >= 0.9);
         } else {
-          st.pat[s] = st.pat[s].length ? [] : ['hit'];
-          if(st.pat[s].length){ st.vel[s] = 0.8; st.prob[s] = 1.0; }
-          st.usePat = st.pat.some(p => p.length);
-          cell.classList.toggle('on', st.pat[s].length > 0);
+          slot.pat[s] = slot.pat[s].length ? [] : ['hit'];
+          if(slot.pat[s].length){ slot.vel[s] = 0.8; slot.prob[s] = 1.0; }
+          // usePat reflects whether EITHER slot has content
+          st.usePat = st.pat.some(p => p.length) || st.patB.some(p => p.length);
+          cell.classList.toggle('on', slot.pat[s].length > 0);
           cell.classList.remove('accent');
-          applyProb(cell, st.prob[s]);
+          applyProb(cell, slot.prob[s]);
         }
         tapTime = now;
       });
     } else {
       notes.forEach(ns => {
         const row = document.createElement('div');
-        const isOn = st.pat[s].includes(ns);
-        row.className = 'nr' + (isOn ? ' on' : '') + (isOn && st.vel[s] >= 0.9 ? ' accent' : '');
+        const isOn = slot.pat[s].includes(ns);
+        row.className = 'nr' + (isOn ? ' on' : '') + (isOn && slot.vel[s] >= 0.9 ? ' accent' : '');
         row.innerHTML = '<span class="nrl">' + ns + '</span>';
-        if(isOn) applyProb(row, st.prob[s]);
+        if(isOn) applyProb(row, slot.prob[s]);
 
         let tapTime = 0;
         row.addEventListener('pointerdown', e => {
           e.preventDefault(); e.stopPropagation();
-          const arr = st.pat[s], idx = arr.indexOf(ns), now = performance.now();
+          const arr = slot.pat[s], idx = arr.indexOf(ns), now = performance.now();
           if(probMode){
             if(idx >= 0){
-              st.prob[s] = cycleProb(st.prob[s]);
-              applyProb(row, st.prob[s]);
+              slot.prob[s] = cycleProb(slot.prob[s]);
+              applyProb(row, slot.prob[s]);
             }
           } else if(idx >= 0 && (now - tapTime < 300)){
-            st.vel[s] = st.vel[s] >= 0.9 ? 0.6 : 1.0;
-            row.classList.toggle('accent', st.vel[s] >= 0.9);
+            slot.vel[s] = slot.vel[s] >= 0.9 ? 0.6 : 1.0;
+            row.classList.toggle('accent', slot.vel[s] >= 0.9);
           } else {
             if(idx >= 0) arr.splice(idx, 1);
             else {
               arr.push(ns);
-              if(st.vel[s] === undefined) st.vel[s] = 0.8;
-              if(st.prob[s] === undefined) st.prob[s] = 1.0;
+              if(slot.vel[s] === undefined) slot.vel[s] = 0.8;
+              if(slot.prob[s] === undefined) slot.prob[s] = 1.0;
             }
             row.classList.toggle('on', arr.includes(ns));
-            st.usePat = st.pat.some(p => p.length);
+            st.usePat = st.pat.some(p => p.length) || st.patB.some(p => p.length);
             if(st.usePat && st.patRoot === undefined) st.patRoot = chordRoot(E.chords[E.ci]);
-            if(arr.includes(ns)) applyProb(row, st.prob[s]);
+            if(arr.includes(ns)) applyProb(row, slot.prob[s]);
           }
           tapTime = now;
         });
@@ -2110,12 +2275,17 @@ function upPlayhead(){
 
 function clearPat(){
   if(!selInst) return;
-  E.inst[selInst].pat = Array.from({length: ST}, () => []);
-  E.inst[selInst].vel = Array(ST).fill(1.0);
-  E.inst[selInst].prob = Array(ST).fill(1.0);
-  E.inst[selInst].usePat = false;
-  E.inst[selInst].patRoot = undefined;
+  const st = E.inst[selInst];
+  setLiveSlot(st,
+    Array.from({length: ST}, () => []),
+    Array(ST).fill(1.0),
+    Array(ST).fill(1.0)
+  );
+  // usePat reflects whether EITHER slot has content
+  st.usePat = st.pat.some(p => p.length) || st.patB.some(p => p.length);
+  if(!st.usePat) st.patRoot = undefined;
   openPat(selInst);
+  lg('Cleared variant ' + st.variant);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -2270,12 +2440,17 @@ async function boot(){
       if(!st.on || !st.chordAllowed[E.ci]) return;
       const base = id.split('_')[0], d = DEFS[base];
       if(!d || d.cat === 'atmo') return;
-      if(st.usePat && st.pat.some(p => p.length)){
-        const vals = st.pat[s16]; if(!vals.length) return;
+      // Pick which variant plays right now
+      const v = activeVariantAt(st, E.ci);
+      const pat = v === 'B' ? (st.patB || []) : (st.pat || []);
+      const vel = v === 'B' ? (st.velB || []) : (st.vel || []);
+      const prob = v === 'B' ? (st.probB || []) : (st.prob || []);
+      if(st.usePat && pat.some(p => p && p.length)){
+        const vals = pat[s16]; if(!vals || !vals.length) return;
         // Per-step probability gate
-        const stepProb = (st.prob && st.prob[s16] !== undefined) ? st.prob[s16] : 1.0;
+        const stepProb = prob[s16] !== undefined ? prob[s16] : 1.0;
         if(stepProb < 1.0 && Math.random() > stepProb) return;
-        const stepVel = st.vel[s16] || 0.8;
+        const stepVel = vel[s16] || 0.8;
         playPatStep(id, d, ch, vals, playTime, e, stepVel);
       }
     });
@@ -2688,6 +2863,8 @@ function saveSong(){
       pat: st.pat, vel: st.vel, prob: st.prob,
       patB: st.patB, velB: st.velB, probB: st.probB,
       variant: st.variant,
+      variantAuto: st.variantAuto,
+      variantMap: st.variantMap,
       usePat: st.usePat, patRoot: st.patRoot,
       chordAllowed: st.chordAllowed,
       iFx: st.iFx,
@@ -2775,6 +2952,7 @@ function applySong(song){
         else if(k === 'patB' && Array.isArray(v)) st.patB = v.map(p => Array.isArray(p) ? [...p] : []);
         else if(k === 'velB' && Array.isArray(v)) st.velB = [...v];
         else if(k === 'probB' && Array.isArray(v)) st.probB = [...v];
+        else if(k === 'variantMap' && Array.isArray(v)) st.variantMap = [...v];
         else if(k === 'chordAllowed' && Array.isArray(v)) st.chordAllowed = [...v];
         else if(k === 'iFx' && v) st.iFx = {...v};
         else if(v !== undefined) st[k] = v;
@@ -2785,6 +2963,8 @@ function applySong(song){
       if(!st.prob) st.prob = Array(ST).fill(1.0);
       if(!st.probB) st.probB = Array(ST).fill(1.0);
       if(!st.variant) st.variant = 'A';
+      if(st.variantAuto === undefined) st.variantAuto = false;
+      if(!st.variantMap) st.variantMap = ['A','A','B','B'];
       if(booted){
         if(gains[id]) gains[id].gain.rampTo(st.vol * st.uVol, 0.1);
         if(panners[id]) panners[id].pan.value = st.pan;
@@ -3038,6 +3218,28 @@ function applyPresetWithClear(preset){
   });
   cloneCount = 0;
   applySong(preset);
+
+  // Auto-generate patterns for any activated, non-atmo instrument
+  // without a pattern — so the pattern editor always shows notes
+  // when you tap an activated instrument.
+  Object.entries(E.inst).forEach(([id, st]) => {
+    const base = id.split('_')[0];
+    const d = DEFS[base];
+    if(!d || d.cat === 'atmo') return;
+    if(!st.on) return;
+    const hasA = st.pat && st.pat.some(p => p && p.length);
+    const hasB = st.patB && st.patB.some(p => p && p.length);
+    if(!hasA && !hasB){
+      // Ensure we fill variant A (the default slot)
+      const prevVariant = st.variant;
+      st.variant = 'A';
+      randPat(id);
+      st.variant = prevVariant;
+    }
+  });
+
+  // If an instrument is selected, refresh the editor view
+  if(selInst && E.inst[selInst]) openPat(selInst);
 }
 
 function savePresetToLibrary(){
@@ -3090,6 +3292,217 @@ document.addEventListener('keydown', e => {
     hideLibrary();
   }
 });
+
+// ═══════════════════════════════════════════════════════════
+// MIDI EXPORT — pure JS writer (Format 1, multi-track)
+// ═══════════════════════════════════════════════════════════
+
+// Variable-length quantity encoding (used for delta times and meta lengths)
+function vlq(n){
+  if(n === 0) return [0];
+  const bytes = [];
+  let temp = Math.max(0, Math.floor(n));
+  while(temp > 0){
+    bytes.unshift(temp & 0x7F);
+    temp >>= 7;
+  }
+  for(let i = 0; i < bytes.length - 1; i++) bytes[i] |= 0x80;
+  return bytes;
+}
+
+// Write integer n as big-endian bytes of specified length
+function writeBE(n, nbytes){
+  const out = [];
+  for(let i = nbytes - 1; i >= 0; i--){
+    out.push((n >> (i * 8)) & 0xFF);
+  }
+  return out;
+}
+
+function writeAscii(s){
+  return [...s].map(c => c.charCodeAt(0) & 0xFF);
+}
+
+// General MIDI channel and program mapping
+// Channel 9 is the GM drum channel — note number picks the drum
+const MIDI_INSTR = {
+  kick:    {ch: 9, drum: 36},   // Bass Drum 1
+  snare:   {ch: 9, drum: 38},   // Acoustic Snare
+  hihat:   {ch: 9, drum: 42},   // Closed Hi-Hat
+  clap:    {ch: 9, drum: 39},   // Hand Clap
+  perc:    {ch: 9, drum: 56},   // Cowbell
+  subbass: {ch: 0, prog: 38},   // Synth Bass 1
+  synbass: {ch: 1, prog: 39},   // Synth Bass 2
+  lead:    {ch: 2, prog: 81},   // Lead 2 (sawtooth)
+  pluck:   {ch: 3, prog: 46},   // Orchestral Harp
+  bell:    {ch: 4, prog: 14},   // Tubular Bells
+  arp:     {ch: 5, prog: 82},   // Lead 3 (calliope)
+  violin:  {ch: 6, prog: 40},   // Violin
+  cello:   {ch: 7, prog: 42},   // Cello
+  keys:    {ch: 8, prog: 0},    // Acoustic Grand Piano
+  hurdy:   {ch: 10, prog: 21},  // Accordion
+  pad:     {ch: 11, prog: 89},  // Pad 2 (warm)
+  strings: {ch: 12, prog: 48},  // String Ensemble 1
+  choir:   {ch: 13, prog: 52},  // Choir Aahs
+  texture: {ch: 14, prog: 88}   // Pad 1 (new age)
+};
+
+function exportMIDI(){
+  const PPQ = 96;
+  const stepTicks = PPQ / 4; // 16th note = 24 ticks
+
+  // Check that something is playable
+  const hasAnything = Object.entries(E.inst).some(([id, st]) => {
+    if(!st.on) return false;
+    const d = DEFS[(id.split('_')[0])];
+    if(!d) return false;
+    if(d.cat === 'atmo') return true;
+    return (st.pat && st.pat.some(p => p && p.length)) || (st.patB && st.patB.some(p => p && p.length));
+  });
+  if(!hasAnything){
+    lg('Nothing to export — activate instruments with patterns first');
+    return;
+  }
+
+  const nameBase = (prompt('MIDI filename (no extension):', 'conductive') || 'conductive').trim() || 'conductive';
+  const barsStr = prompt('How many bars? (1–32, each bar = 1 chord of progression)', '8');
+  const totalBars = Math.max(1, Math.min(32, parseInt(barsStr, 10) || 8));
+
+  // ── Meta track (tempo, time signature, song name) ──
+  const meta = [];
+  const tempoUs = Math.round(60000000 / E.tempo);
+  meta.push(...vlq(0), 0xFF, 0x51, 0x03, ...writeBE(tempoUs, 3));
+  meta.push(...vlq(0), 0xFF, 0x58, 0x04, 4, 2, 24, 8); // 4/4
+  const songNameBytes = writeAscii(nameBase.slice(0, 64));
+  meta.push(...vlq(0), 0xFF, 0x03, songNameBytes.length, ...songNameBytes);
+  meta.push(...vlq(0), 0xFF, 0x2F, 0x00);
+
+  const tracks = [meta];
+
+  // ── One track per active instrument ──
+  Object.entries(E.inst).forEach(([id, st]) => {
+    if(!st.on) return;
+    const base = id.split('_')[0];
+    const d = DEFS[base];
+    const cfg = MIDI_INSTR[base];
+    if(!d || !cfg) return;
+
+    const events = []; // {tick, type:'on'|'off', note, vel}
+
+    for(let bar = 0; bar < totalBars; bar++){
+      const chordIdx = bar % E.chords.length;
+      if(!st.chordAllowed[chordIdx]) continue;
+      const ch = E.chords[chordIdx];
+      const barStart = bar * 16 * stepTicks;
+
+      if(d.cat === 'atmo'){
+        // Atmo plays the chord as a whole note across the bar
+        let notes;
+        if(base === 'choir') notes = ch.map(n => n.replace(/\d/, '4'));
+        else if(base === 'texture') notes = [ch[0].replace(/\d/, '2')];
+        else notes = ch;
+        const dur = 16 * stepTicks;
+        notes.forEach(n => {
+          const m = noteToMidi(n);
+          events.push({tick: barStart, type: 'on', note: m, vel: 72});
+          events.push({tick: barStart + dur - 1, type: 'off', note: m, vel: 0});
+        });
+      } else {
+        // Pattern-based — pick variant for this chord
+        const v = activeVariantAt(st, chordIdx);
+        const pat = v === 'B' ? (st.patB || []) : (st.pat || []);
+        const vel = v === 'B' ? (st.velB || []) : (st.vel || []);
+        if(!pat || !pat.some(p => p && p.length)) continue;
+
+        const shift = st.patRoot !== undefined ? (chordRoot(ch) - st.patRoot + 12) % 12 : 0;
+
+        for(let s = 0; s < 16; s++){
+          const vals = pat[s];
+          if(!vals || !vals.length) continue;
+          const tick = barStart + s * stepTicks;
+          const midiVel = Math.max(1, Math.min(127, Math.round((vel[s] || 0.8) * 110)));
+
+          let durTicks;
+          if(d.cat === 'rhythm') durTicks = 12;
+          else if(d.cat === 'bass') durTicks = PPQ; // quarter note
+          else durTicks = PPQ / 2; // eighth note
+
+          if(d.cat === 'rhythm'){
+            events.push({tick, type: 'on', note: cfg.drum, vel: midiVel});
+            events.push({tick: tick + durTicks - 1, type: 'off', note: cfg.drum, vel: 0});
+          } else {
+            vals.forEach(ns => {
+              if(ns === 'hit') return;
+              const noteStr = shift === 0 ? ns : midiToNote(noteToMidi(ns) + shift);
+              const m = noteToMidi(noteStr);
+              events.push({tick, type: 'on', note: m, vel: midiVel});
+              events.push({tick: tick + durTicks - 1, type: 'off', note: m, vel: 0});
+            });
+          }
+        }
+      }
+    }
+
+    if(events.length === 0) return;
+
+    // Sort: ascending tick; at same tick, 'off' before 'on' (avoids hanging notes)
+    events.sort((a, b) => (a.tick - b.tick) || (a.type === 'off' ? -1 : 1));
+
+    // Build track bytes
+    const track = [];
+    const trackName = d.name + (id.includes('_') ? ' ' + id.split('_')[1] : '');
+    const tnBytes = writeAscii(trackName.slice(0, 64));
+    track.push(...vlq(0), 0xFF, 0x03, tnBytes.length, ...tnBytes);
+
+    if(d.cat !== 'rhythm' && cfg.prog !== undefined){
+      track.push(...vlq(0), 0xC0 | cfg.ch, cfg.prog);
+    }
+
+    let lastTick = 0;
+    events.forEach(ev => {
+      const delta = Math.max(0, ev.tick - lastTick);
+      track.push(...vlq(delta));
+      if(ev.type === 'on'){
+        track.push(0x90 | cfg.ch, ev.note & 0x7F, ev.vel & 0x7F);
+      } else {
+        track.push(0x80 | cfg.ch, ev.note & 0x7F, 0);
+      }
+      lastTick = ev.tick;
+    });
+
+    track.push(...vlq(0), 0xFF, 0x2F, 0x00); // end of track
+    tracks.push(track);
+  });
+
+  if(tracks.length === 1){
+    lg('No playable patterns found for export');
+    return;
+  }
+
+  // ── Assemble the .mid file ──
+  const out = [];
+  out.push(...writeAscii('MThd'));
+  out.push(...writeBE(6, 4));
+  out.push(...writeBE(1, 2));              // Format 1 (multi-track)
+  out.push(...writeBE(tracks.length, 2));  // Number of tracks
+  out.push(...writeBE(PPQ, 2));            // Ticks per quarter
+
+  tracks.forEach(track => {
+    out.push(...writeAscii('MTrk'));
+    out.push(...writeBE(track.length, 4));
+    out.push(...track);
+  });
+
+  // Download
+  const blob = new Blob([new Uint8Array(out)], {type: 'audio/midi'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = nameBase.replace(/[^a-zA-Z0-9_-]/g, '_') + '.mid';
+  a.click();
+  URL.revokeObjectURL(url);
+  lg('Exported ' + nameBase + '.mid (' + (tracks.length - 1) + ' tracks · ' + totalBars + ' bars)');
+}
 
 // ═══════════════════════════════════════════════════════════
 // INITIAL RENDER
