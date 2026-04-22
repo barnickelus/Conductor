@@ -347,6 +347,104 @@ canvas#wave{position:fixed;inset:0;width:100%;height:100%;z-index:2;opacity:0.4;
   transition: opacity 0.4s;
 }
 
+/* AI response bubble — appears in the conduct zone */
+.ai-bubble{
+  position: absolute;
+  left: 50%;
+  top: 20px;
+  transform: translateX(-50%) translateY(-10px);
+  max-width: min(520px, 90%);
+  background: linear-gradient(135deg, rgba(14,22,42,0.92) 0%, rgba(22,15,42,0.92) 100%);
+  border: 1px solid rgba(125,211,252,0.25);
+  border-radius: var(--r3);
+  padding: 10px 16px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 6px 24px rgba(0,0,0,0.5), 0 0 20px rgba(0,229,255,0.1);
+  z-index: 5;
+}
+.ai-bubble.show{
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+.ai-bubble.thinking{
+  border-color: rgba(167,139,250,0.4);
+  box-shadow: 0 6px 24px rgba(0,0,0,0.5), 0 0 18px rgba(167,139,250,0.25);
+}
+.ai-bubble.error{
+  border-color: rgba(244,114,182,0.45);
+  box-shadow: 0 6px 24px rgba(0,0,0,0.5), 0 0 18px rgba(244,114,182,0.2);
+}
+.ai-bubble-label{
+  font-family:'JetBrains Mono',monospace;
+  font-size: var(--fs-xs);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--c);
+  font-weight: 700;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: var(--s1);
+}
+.ai-bubble.thinking .ai-bubble-label{ color: var(--v) }
+.ai-bubble.error .ai-bubble-label{ color: var(--m) }
+.ai-bubble-dot{
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--c);
+  box-shadow: 0 0 6px var(--c);
+}
+.ai-bubble.thinking .ai-bubble-dot{
+  background: var(--v);
+  box-shadow: 0 0 6px var(--v);
+  animation: aiPulse 0.9s ease-in-out infinite;
+}
+.ai-bubble.error .ai-bubble-dot{ background: var(--m); box-shadow: 0 0 6px var(--m); }
+@keyframes aiPulse{
+  0%,100%{opacity: 0.35; transform: scale(0.85)}
+  50%{opacity: 1; transform: scale(1.2)}
+}
+.ai-bubble-text{
+  font-size: var(--fs-md);
+  color: var(--t);
+  line-height: 1.45;
+  font-weight: 500;
+}
+.ai-bubble-meta{
+  margin-top: 4px;
+  font-family:'JetBrains Mono',monospace;
+  font-size: var(--fs-xs);
+  color: var(--t-muted);
+  letter-spacing: 0.05em;
+}
+.ai-dots::after{
+  content: '...';
+  display: inline-block;
+  animation: aiDots 1.4s steps(4) infinite;
+  letter-spacing: 0.1em;
+}
+@keyframes aiDots{
+  0%{content: ''}
+  25%{content: '.'}
+  50%{content: '..'}
+  75%{content: '...'}
+}
+
+/* Command bar active state while thinking */
+.cmdb input.thinking{
+  border-color: var(--v);
+  box-shadow: 0 0 10px rgba(167,139,250,0.3);
+}
+.cmdb .tb.thinking{
+  color: var(--v);
+  border-color: rgba(167,139,250,0.5);
+  background: rgba(167,139,250,0.08);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
 /* ═══════════════════════════════════════════════════════════
    COMMAND BAR
    ═══════════════════════════════════════════════════════════ */
@@ -1171,11 +1269,12 @@ canvas#sbg{
   <!-- CONDUCT ZONE -->
   <div class="cz" id="cz">
     <div class="cz-hint m" id="czh">— touch to conduct —<br><span style="font-size:var(--fs-xs);opacity:0.6">one finger: point · two fingers: tempo</span></div>
+    <div class="ai-bubble" id="aiBubble"></div>
   </div>
 
   <!-- CMD -->
   <div class="cmdb">
-    <input type="text" id="cmdIn" class="m" placeholder="describe what you want to hear…">
+    <input type="text" id="cmdIn" class="m" placeholder="tell the composer what to make… e.g. 'dark minimal techno at 128' or 'make the kick louder'">
     <button class="tb m" id="cmdGo">→</button>
     <div id="log" class="m">Tap Start to begin</div>
   </div>
@@ -1670,23 +1769,38 @@ function gURL(){ return 'https://generativelanguage.googleapis.com/v1beta/models
 
 async function gCall(p, retries){
   const rd = [1500, 3000], mx = retries || rd.length;
+  let lastError = 'Unknown error';
   for(let a=0; a<=mx; a++){
     try {
       const r = await fetch(gURL(), {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({contents: [{parts: [{text: p}]}]})
+        body: JSON.stringify({
+          contents: [{parts: [{text: p}]}],
+          generationConfig: {
+            temperature: 0.85,
+            responseMimeType: 'application/json'
+          }
+        })
       });
       const d = await r.json();
-      if(r.ok && d.candidates?.[0]?.content?.parts?.[0]?.text)
+      if(r.ok && d.candidates?.[0]?.content?.parts?.[0]?.text){
         return {ok: 1, text: d.candidates[0].content.parts[0].text};
-      if(d.error && a===mx) return {ok: 0, error: d.error.message};
+      }
+      if(d.error){
+        lastError = d.error.message || ('HTTP ' + r.status);
+        if(a===mx) return {ok: 0, error: lastError};
+      } else if(!r.ok){
+        lastError = 'HTTP ' + r.status;
+        if(a===mx) return {ok: 0, error: lastError};
+      }
     } catch(e){
-      if(a===mx) return {ok: 0, error: e.message};
+      lastError = e.message || 'Network error';
+      if(a===mx) return {ok: 0, error: lastError};
     }
     if(a<mx) await new Promise(r => setTimeout(r, rd[Math.min(a, rd.length-1)]));
   }
-  return {ok: 0, error: 'Max retries'};
+  return {ok: 0, error: lastError};
 }
 
 async function connectAPI(){
@@ -2709,110 +2823,406 @@ function conductEnd(){
 // ═══════════════════════════════════════════════════════════
 // AI (Gemini)
 // ═══════════════════════════════════════════════════════════
-async function interpret(input){
-  if(!input?.trim()) return;
-  lg('Thinking…');
-  if(!gKey){ fallback(input); return; }
-  setAP('chk');
+// ═══════════════════════════════════════════════════════════
+// AI RESPONSE BUBBLE
+// ═══════════════════════════════════════════════════════════
+let aiBubbleTimer = null;
+function showAIBubble(kind, text, meta){
+  const el = document.getElementById('aiBubble');
+  if(!el) return;
+  clearTimeout(aiBubbleTimer);
+  const label = kind === 'thinking' ? 'Composer thinking'
+              : kind === 'error'    ? 'AI error'
+              : 'Composer';
+  const showDots = kind === 'thinking' ? '<span class="ai-dots"></span>' : '';
+  el.innerHTML =
+    '<div class="ai-bubble-label m"><div class="ai-bubble-dot"></div>' + label + '</div>' +
+    '<div class="ai-bubble-text">' + escapeHtml(text) + showDots + '</div>' +
+    (meta ? '<div class="ai-bubble-meta m">' + escapeHtml(meta) + '</div>' : '');
+  el.className = 'ai-bubble show' + (kind === 'thinking' ? ' thinking' : kind === 'error' ? ' error' : '');
+  if(kind !== 'thinking'){
+    aiBubbleTimer = setTimeout(() => el.classList.remove('show'), kind === 'error' ? 6000 : 8000);
+  }
+}
+function hideAIBubble(){
+  const el = document.getElementById('aiBubble');
+  if(el) el.classList.remove('show');
+}
+function escapeHtml(s){
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
 
-  const il = Object.entries(DEFS).map(([k,v]) => k + '(' + v.name + ')').join(', ');
-  const al = Object.entries(E.inst).filter(([k,v]) => v.on).map(([k]) => k).join(',');
+// ═══════════════════════════════════════════════════════════
+// AI PROMPT BUILDER
+// Teaches the model everything it can control. Asks for a
+// `description` field so the user always sees what changed.
+// ═══════════════════════════════════════════════════════════
+function buildAIPrompt(input){
   const sc = getScale(E.key, E.mode);
-  const prompt = `You control a live music engine. Return ONLY valid JSON, no markdown fences.
-Instruments: ${il}
-Keys: C,D,E,F,G,A,B. Modes: minor, major. Current scale: ${sc.join(',')}
+  const activeList = Object.entries(E.inst)
+    .filter(([k,v]) => v.on && !k.includes('_'))
+    .map(([k]) => k);
+  const currentChords = E.chords.map(chordName).join(' → ');
+  const instrumentCatalog = [
+    'RHYTHM drums — kick, snare, hihat, clap, perc (use "hit" or null per step)',
+    'BASS — subbass (deep pure sine, use root notes like C2/F2), synbass (saw w/filter, use C2-C3)',
+    'MELODIC — lead (sustained triangle), pluck (fast decay), bell (FM tone), arp (square), violin, cello, hurdy (gritty FM), keys (poly)',
+    'ATMO — pad, strings, choir, texture — these AUTO-PLAY the current chord; do not send patterns for these, just set on/off'
+  ].join('\n');
 
-Format:
-{"tempo":40-200,"energy":0-1,"key":"X","mode":"minor|major","filterCutoff":100-8000,
-"instruments":{"name":bool},
-"patterns":{"name":["C4",null,"E4",null,...16 total]}}
+  return `You are the composer inside Conductive, a live semicircular music engine the user conducts with touch. They describe what they want; you return JSON changes that the engine applies immediately.
 
-Pattern rules:
-- 16 slots per instrument
-- Rhythm uses "hit" or null
-- Melodic uses note strings like "C4","Eb5" or null
-- Only include instruments/patterns you want to change
+# Your capabilities
 
-State: tempo=${E.tempo}, energy=${E.energy}, key=${E.key} ${E.mode}, active=[${al}]
-Command: "${input}"`;
+You can change ANY of these in one response:
 
-  const r = await gCall(prompt, 2);
-  if(r.ok){
-    try {
-      const cleaned = r.text.replace(/```json|```/g, '').trim();
-      applyAI(JSON.parse(cleaned));
-      setAP('ok');
-    } catch(e){
-      setAP('ok');
-      lg('AI response parse error');
-      fallback(input);
-    }
-  } else {
-    setAP('ok');
-    fallback(input);
+## Tempo & feel
+- tempo (40-200 BPM)
+- energy (0.0-1.0, affects dynamics and generative density)
+- key (C, D, E, F, G, A, B) + mode ("minor" or "major")
+
+## Chord progression
+- "chords": array of 4 chords. Each chord is an array of 3 notes like ["C3","Eb3","G3"].
+- Only set this if you want a custom progression; otherwise the engine auto-generates from key/mode.
+- Current: ${currentChords}
+- Current scale degrees: ${sc.join(', ')}
+
+## Instruments (19 available):
+${instrumentCatalog}
+
+Activate/deactivate with "instruments": {"name": true/false}
+
+## Patterns — 16 steps each (one bar of 16th notes)
+- Rhythm: ["hit", null, null, null, "hit", ...] — each slot is a 16th note
+- Melodic: ["C4", null, "Eb4", null, ...] — use scale-appropriate notes
+- Bass: lower octaves ("C2", "F2")
+- Lead/melody: "C4", "E4", "G4"
+- Don't send patterns for atmo instruments (pad/strings/choir/texture) — they auto-play chords
+
+Typical patterns:
+- 4-on-floor kick: ["hit",null,null,null,"hit",null,null,null,"hit",null,null,null,"hit",null,null,null]
+- Classic backbeat snare: [null,null,null,null,"hit",null,null,null,null,null,null,null,"hit",null,null,null]
+- Off-beat hihat: [null,null,"hit",null,null,null,"hit",null,null,null,"hit",null,null,null,"hit",null]
+
+## FX (all 0-100)
+"fx": {"reverb": 30, "delay": 20, "filter": 65, "chorus": 25, "swing": 10}
+
+## Per-instrument controls
+"perInstrument": {
+  "kick": {"vol": 100, "sus": 50},  // vol 0-100, sus 0-100
+  "strings": {"vol": 70, "sus": 90}
+}
+
+# Current state (before your changes)
+- Tempo: ${E.tempo}
+- Energy: ${E.energy.toFixed(2)}
+- Key: ${E.key} ${E.mode}
+- Scale notes: ${sc.join(', ')}
+- Active instruments: ${activeList.length ? activeList.join(', ') : 'none'}
+- Progression: ${currentChords}
+- Reverb: ${document.getElementById('fxRev').value}, Delay: ${document.getElementById('fxDel').value}, Filter: ${document.getElementById('fxFilt').value}, Chorus: ${document.getElementById('fxCho').value}, Swing: ${document.getElementById('fxSw').value}
+
+# Response format — ONLY valid JSON, no markdown, no prose:
+{
+  "description": "Brief 1-2 sentence description of what you changed, in second person (\\"I made it...\\" or \\"Switched to...\\")",
+  "tempo": 128,
+  "energy": 0.8,
+  "key": "A",
+  "mode": "minor",
+  "chords": [["A2","C3","E3"], ["F2","A2","C3"], ["G2","B2","D3"], ["E2","G#2","B2"]],
+  "fx": {"reverb": 20, "delay": 15, "filter": 70, "chorus": 30, "swing": 0},
+  "instruments": {"kick": true, "snare": true, "hihat": true, "synbass": true, "lead": false, "pad": true},
+  "patterns": {
+    "kick": ["hit",null,null,null,"hit",null,null,null,"hit",null,null,null,"hit",null,null,null],
+    "synbass": ["A2",null,null,null,null,null,null,null,"A2",null,null,null,null,null,null,null]
+  },
+  "perInstrument": {
+    "synbass": {"vol": 90, "sus": 40},
+    "pad": {"vol": 60, "sus": 95}
   }
 }
 
+IMPORTANT:
+- Always include "description" — the user reads it to know what you did.
+- Only include the fields you want to change. Skip fields you don't touch.
+- When activating an instrument, also give it a pattern (unless it's an atmo instrument).
+- Scale your changes to the request. "make the kick louder" → just "perInstrument": {"kick": {"vol": 120}}. "Build a lofi beat" → full setup.
+- Match notes to the key. If key changes, rewrite melodic patterns to fit the new scale.
+
+User request: "${input}"`;
+}
+
+// ═══════════════════════════════════════════════════════════
+// AI INTERPRET — send request to Gemini, apply response
+// ═══════════════════════════════════════════════════════════
+async function interpret(input){
+  if(!input?.trim()) return;
+
+  if(!gKey){
+    showAIBubble('error', 'No API key yet. Click the API badge (top right) to paste a free Gemini key.', 'Using basic keyword fallback instead.');
+    fallback(input);
+    return;
+  }
+
+  // Visual feedback — command bar, bubble, api status
+  const cmdIn = document.getElementById('cmdIn');
+  const cmdGo = document.getElementById('cmdGo');
+  cmdIn.classList.add('thinking');
+  cmdGo.classList.add('thinking');
+  showAIBubble('thinking', 'Composing for: "' + input + '"', 'Model: ' + GM[gMi]);
+  setAP('chk');
+  lg('Asking AI…');
+
+  const prompt = buildAIPrompt(input);
+  const r = await gCall(prompt, 2);
+
+  cmdIn.classList.remove('thinking');
+  cmdGo.classList.remove('thinking');
+
+  if(!r.ok){
+    setAP('off', r.error || '');
+    showAIBubble('error',
+      'Could not reach the AI: ' + (r.error || 'unknown error'),
+      'Falling back to built-in presets.');
+    fallback(input);
+    return;
+  }
+
+  setAP('ok');
+
+  let j;
+  try {
+    const cleaned = r.text.replace(/```json|```/g, '').trim();
+    // Sometimes the model wraps JSON in other prose — grab the outermost {...}
+    const firstBrace = cleaned.indexOf('{');
+    const lastBrace = cleaned.lastIndexOf('}');
+    const jsonStr = (firstBrace >= 0 && lastBrace > firstBrace)
+      ? cleaned.slice(firstBrace, lastBrace + 1)
+      : cleaned;
+    j = JSON.parse(jsonStr);
+  } catch(e){
+    showAIBubble('error', 'AI response was not valid JSON.', 'Falling back.');
+    lg('Parse error: ' + e.message);
+    fallback(input);
+    return;
+  }
+
+  const summary = applyAI(j);
+  const description = (j.description || '').trim() || 'Applied ' + summary.count + ' changes.';
+  showAIBubble('ok', description, summary.meta);
+  lg('AI: ' + description);
+}
+
+// ═══════════════════════════════════════════════════════════
+// APPLY AI RESPONSE — comprehensive handler for every field
+// Returns {count, meta} summary for the response bubble
+// ═══════════════════════════════════════════════════════════
 function applyAI(j){
-  if(j.tempo) E.tempo = Math.max(40, Math.min(200, j.tempo));
-  if(j.energy !== undefined) E.energy = Math.max(0, Math.min(1, j.energy));
-  if(j.filterCutoff) E.fc = Math.max(100, Math.min(8000, j.filterCutoff));
-  if(j.key && KEYS_DATA[j.key]) E.key = j.key;
-  if(j.mode === 'major' || j.mode === 'minor') E.mode = j.mode;
+  const changed = [];
+  const affectedInstruments = new Set();
 
-  if(j.instruments) Object.entries(j.instruments).forEach(([k, v]) => {
-    if(E.inst[k]){
-      const turnedOn = v && !E.inst[k].on;
-      E.inst[k].on = !!v;
-      if(turnedOn && DEFS[k].cat !== 'atmo') randPat(k);
+  // TEMPO
+  if(typeof j.tempo === 'number'){
+    E.tempo = Math.max(40, Math.min(200, Math.round(j.tempo)));
+    changed.push(E.tempo + ' BPM');
+  }
+
+  // ENERGY
+  if(typeof j.energy === 'number'){
+    E.energy = Math.max(0, Math.min(1, j.energy));
+  }
+
+  // FILTER / CUTOFF (legacy field)
+  if(typeof j.filterCutoff === 'number'){
+    E.fc = Math.max(100, Math.min(8000, j.filterCutoff));
+  }
+
+  // KEY / MODE — may force chord regen below
+  let keyChanged = false;
+  if(j.key && KEYS_DATA[j.key]){
+    if(E.key !== j.key) keyChanged = true;
+    E.key = j.key;
+  }
+  if(j.mode === 'major' || j.mode === 'minor'){
+    if(E.mode !== j.mode) keyChanged = true;
+    E.mode = j.mode;
+  }
+  if(keyChanged){
+    changed.push(E.key + (E.mode==='minor'?'m':''));
+  }
+
+  // CHORDS — explicit from AI wins, else default for new key
+  if(Array.isArray(j.chords) && j.chords.length >= 3){
+    const validChords = j.chords
+      .filter(c => Array.isArray(c) && c.length)
+      .slice(0, 4)
+      .map(c => c.map(n => String(n)));
+    if(validChords.length >= 3){
+      while(validChords.length < 4) validChords.push(validChords[validChords.length - 1]);
+      E.chords = validChords;
+      changed.push('custom progression');
     }
-  });
+  } else if(keyChanged && KEYS_DATA[E.key]?.[E.mode]){
+    E.chords = KEYS_DATA[E.key][E.mode];
+  }
 
-  if(j.patterns) Object.entries(j.patterns).forEach(([id, pat]) => {
-    if(!E.inst[id] || !Array.isArray(pat)) return;
-    E.inst[id].pat = pat.map(v => v ? [v] : []);
-    E.inst[id].vel = pat.map(v => v ? 0.85 : 1.0);
-    E.inst[id].usePat = E.inst[id].pat.some(p => p.length);
-    if(E.inst[id].usePat) E.inst[id].patRoot = chordRoot(E.chords[E.ci]);
-  });
+  // INSTRUMENTS on/off
+  const turnedOn = [], turnedOff = [];
+  if(j.instruments && typeof j.instruments === 'object'){
+    Object.entries(j.instruments).forEach(([k, v]) => {
+      if(!E.inst[k]) return;
+      const wasOn = E.inst[k].on;
+      E.inst[k].on = !!v;
+      affectedInstruments.add(k);
+      if(v && !wasOn){
+        turnedOn.push(DEFS[k].name);
+        // Seed a pattern if none exists (for non-atmo)
+        if(DEFS[k].cat !== 'atmo' && !hasAnyPattern(E.inst[k])) randPat(k);
+      }
+      if(!v && wasOn) turnedOff.push(DEFS[k].name);
+    });
+  }
+  if(turnedOn.length)  changed.push('+' + turnedOn.join(', '));
+  if(turnedOff.length) changed.push('−' + turnedOff.join(', '));
 
-  if(KEYS_DATA[E.key]?.[E.mode]) E.chords = KEYS_DATA[E.key][E.mode];
+  // PATTERNS from AI — overwrite variant A of each named instrument
+  let patternCount = 0;
+  if(j.patterns && typeof j.patterns === 'object'){
+    Object.entries(j.patterns).forEach(([id, pat]) => {
+      if(!E.inst[id] || !Array.isArray(pat)) return;
+      // Pad or trim to ST steps
+      const pat16 = pat.slice(0, ST);
+      while(pat16.length < ST) pat16.push(null);
+      // Convert to the engine's pat array format (array-of-arrays)
+      const newPat = pat16.map(v => {
+        if(v === null || v === undefined) return [];
+        if(typeof v === 'string' && v.trim()) return [v.trim()];
+        if(Array.isArray(v)) return v.filter(Boolean).map(String);
+        return [];
+      });
+      // Velocities: accent on beats 1/5/9/13 if present, soft otherwise
+      const newVel = newPat.map((slot, i) => {
+        if(!slot.length) return 1.0;
+        return i % 4 === 0 ? 1.0 : 0.8;
+      });
+      const newProb = Array(ST).fill(1.0);
+      // Write into variant A (the default slot)
+      E.inst[id].pat = newPat;
+      E.inst[id].vel = newVel;
+      E.inst[id].prob = newProb;
+      E.inst[id].usePat = hasAnyPattern(E.inst[id]);
+      if(E.inst[id].usePat) E.inst[id].patRoot = chordRoot(E.chords[E.ci]);
+      // If user was editing variant B or in chord mode, switch back to A to show AI's work
+      E.inst[id].variant = 'A';
+      E.inst[id].variantAuto = false;
+      affectedInstruments.add(id);
+      patternCount++;
+    });
+  }
+  if(patternCount) changed.push(patternCount + ' pattern' + (patternCount > 1 ? 's' : ''));
+
+  // FX — global
+  if(j.fx && typeof j.fx === 'object'){
+    const fxMap = {reverb: 'fxRev', delay: 'fxDel', filter: 'fxFilt', chorus: 'fxCho', swing: 'fxSw'};
+    const fxKey = {reverb: 'rev', delay: 'del', filter: 'filt', chorus: 'cho'};
+    Object.entries(j.fx).forEach(([key, val]) => {
+      const v = Math.max(0, Math.min(100, +val));
+      if(isNaN(v)) return;
+      const slider = document.getElementById(fxMap[key]);
+      if(!slider) return;
+      slider.value = v;
+      if(key === 'swing') setSwing(v);
+      else setGFx(fxKey[key], v);
+    });
+    changed.push('fx');
+  }
+
+  // PER-INSTRUMENT vol/sus
+  if(j.perInstrument && typeof j.perInstrument === 'object'){
+    Object.entries(j.perInstrument).forEach(([id, params]) => {
+      if(!E.inst[id] || !params || typeof params !== 'object') return;
+      const st = E.inst[id];
+      if(typeof params.vol === 'number'){
+        st.uVol = Math.max(0, Math.min(1.5, params.vol / 100));
+        if(gains[id]) gains[id].gain.rampTo(st.vol * st.uVol, 0.15);
+      }
+      if(typeof params.sus === 'number'){
+        st.sus = Math.max(0, Math.min(1, params.sus / 100));
+        if(synths[id]){
+          try { synths[id].set({envelope: {sustain: st.sus, release: 0.15 + st.sus*2.5}}); } catch(e){}
+        }
+      }
+      affectedInstruments.add(id);
+    });
+  }
+
+  // Apply to live audio engine
   if(booted){
     Tone.Transport.bpm.rampTo(E.tempo, 2);
-    fx.filt.frequency.rampTo(E.fc, 1);
+    if(fx.filt) fx.filt.frequency.rampTo(E.fc, 1);
   }
-  buildStage(); upUI(); renderChords();
-  if(selInst && (j.patterns?.[selInst] || j.instruments?.[selInst] !== undefined)) openPat(selInst);
-  lg('AI → ' + E.tempo + 'bpm ' + E.key + (E.mode==='minor'?'m':''));
+
+  // Rebuild UI
+  buildStage();
+  upUI();
+  renderChords();
+
+  // Refresh pattern editor — always, if an instrument is selected
+  // so the user sees what the AI did to their current pattern view
+  if(selInst && E.inst[selInst]) openPat(selInst);
+
+  const countTotal = changed.length + affectedInstruments.size;
+  const meta = [E.tempo + ' BPM', E.key + (E.mode==='minor'?'m':''),
+                affectedInstruments.size + ' instrument' + (affectedInstruments.size !== 1 ? 's' : '')]
+               .join(' · ');
+  return {count: countTotal, meta};
 }
 
 function fallback(cmd){
   const t = (typeof cmd === 'string' ? cmd : '').toLowerCase();
-  if(t.match(/chill|calm|slow|soft/)){ E.tempo=78; E.energy=0.25; }
+  const changes = [];
+  if(t.match(/chill|calm|slow|soft/)){
+    E.tempo = 78; E.energy = 0.25;
+    changes.push('slower tempo', 'lower energy');
+  }
   else if(t.match(/hype|dance|party|fast|drop/)){
-    E.tempo=130; E.energy=0.9;
-    E.inst.clap.on=true; E.inst.arp.on=true;
+    E.tempo = 130; E.energy = 0.9;
+    E.inst.clap.on = true; E.inst.arp.on = true;
     randPat('clap'); randPat('arp');
+    changes.push('dance tempo', 'clap + arp');
   }
   else if(t.match(/dark|heavy|intense/)){
-    E.tempo=95; E.energy=0.75; E.mode='minor';
-    E.inst.subbass.on=true; randPat('subbass');
+    E.tempo = 95; E.energy = 0.75; E.mode = 'minor';
+    E.inst.subbass.on = true; randPat('subbass');
+    changes.push('minor key', 'sub bass');
   }
   else if(t.match(/cinematic|epic|film/)){
-    E.tempo=85; E.energy=0.6;
-    E.inst.strings.on=true; E.inst.pad.on=true;
-    E.inst.violin.on=true; E.inst.cello.on=true;
+    E.tempo = 85; E.energy = 0.6;
+    E.inst.strings.on = true; E.inst.pad.on = true;
+    E.inst.violin.on = true; E.inst.cello.on = true;
     randPat('violin'); randPat('cello');
+    changes.push('strings + violin + cello + pad');
   }
   else if(t.match(/ambient|space|dream/)){
-    E.tempo=70; E.energy=0.3;
-    E.inst.pad.on=true; E.inst.texture.on=true; E.inst.bell.on=true;
+    E.tempo = 70; E.energy = 0.3;
+    E.inst.pad.on = true; E.inst.texture.on = true; E.inst.bell.on = true;
     randPat('bell');
+    changes.push('ambient pad + texture + bell');
+  }
+  else {
+    changes.push('no keyword matched');
   }
   if(KEYS_DATA[E.key]?.[E.mode]) E.chords = KEYS_DATA[E.key][E.mode];
   if(booted) Tone.Transport.bpm.rampTo(E.tempo, 2);
   buildStage(); upUI(); renderChords();
-  lg('→ ' + E.tempo + 'bpm');
+  if(selInst && E.inst[selInst]) openPat(selInst);
+  if(changes.length){
+    showAIBubble('ok', 'Applied: ' + changes.join(', '),
+      'Basic pattern matching — add a Gemini key for smarter composition.');
+  }
+  lg('Fallback: ' + E.tempo + ' BPM');
 }
 
 // ═══════════════════════════════════════════════════════════
